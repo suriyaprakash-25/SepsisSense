@@ -28,7 +28,7 @@ streamlit-option-menu>=0.3.2
 streamlit-lottie>=0.0.3
 streamlit-aggrid>=0.3.0
 
-# Interactive Components
+# Interactive Components 
 bokeh>=2.4.0
 altair>=4.2.0
 
