@@ -1,192 +1,317 @@
-# 🩺 SepsisSense - AI-Powered Early Sepsis Detection System
+# 🩺 SepsisSense — AI-Powered Early Sepsis Detection
 
-![SepsisSense Banner](https://img.shields.io/badge/SepsisSense-AI%20Healthcare-red?style=for-the-badge&logo=heart)
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue?style=flat-square&logo=python)
-![Streamlit](https://img.shields.io/badge/Streamlit-Web%20App-FF4B4B?style=flat-square&logo=streamlit)
+![Streamlit](https://img.shields.io/badge/Streamlit-1.15%2B-FF4B4B?style=flat-square&logo=streamlit)
+![XGBoost](https://img.shields.io/badge/Model-XGBoost%20%2F%20LightGBM-orange?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 
-## 🎯 Project Overview
+SepsisSense is a machine learning system for predicting sepsis onset in ICU patients using the [PhysioNet Challenge 2019](https://physionet.org/content/challenge-2019/1.0.0/) dataset. It provides an end-to-end pipeline — from raw `.psv` patient files to a Streamlit web application with SHAP-based explanations.
 
-**SepsisSense** is an advanced AI-powered system designed to predict sepsis onset in ICU patients **6 hours before it occurs**, potentially saving countless lives through early intervention. Built using state-of-the-art machine learning techniques and featuring an intuitive web interface with real-time explainability.
+---
 
-### 🚀 Key Features
+## Architecture
 
-- **🔮 Early Prediction**: Predicts sepsis 6 hours in advance with high accuracy
-- **📊 Real-time Dashboard**: Interactive Streamlit web application
-- **🔍 AI Explainability**: SHAP-powered feature importance analysis
-- **⚡ Fast Processing**: Optimized preprocessing and inference pipeline
-- **📱 Responsive UI**: Modern, animated, and user-friendly interface
-- **🩺 Clinical Integration**: Ready for healthcare environment deployment
-
-## 🏗️ System Architecture
-
-```
-SepsisSense/
-├── 📁 app/
-│   └── streamlit_app.py          # Main web application
-├── 📁 data/
-│   ├── raw/                      # Raw PhysioNet Challenge 2019 data
-│   ├── interim/                  # Intermediate processing files
-│   └── processed/                # Final processed datasets
-├── 📁 models/
-│   ├── sepsissense_xgb.pkl       # Trained XGBoost model
-│   └── scaler.pkl                # Feature scaler
-├── 📁 notebooks/
-│   ├── 01_eda.ipynb             # Exploratory Data Analysis
-│   ├── 02_feature_eng.ipynb     # Feature Engineering
-│   └── 03_modeling.ipynb        # Model Development
-├── 📁 src/
-│   ├── preprocess.py            # Data preprocessing pipeline
-│   ├── feature_engineering.py   # Feature extraction & engineering
-│   ├── train_model.py           # Model training pipeline
-│   └── explain_model.py         # SHAP explainability
-├── requirements.txt             # Python dependencies
-└── README.md                    # Project documentation
+```mermaid
+flowchart TD
+    A["PhysioNet 2019\n.psv patient files"] --> B["train_model.py\nload_data()"]
+    B --> C["add_rolling_features()\n6-hour rolling means\nHR, MAP, Temp, Resp, O2Sat"]
+    C --> D["add_clinical_features()\nShock Index, qSOFA,\nHR/MAP trends, Lactate/Creatinine,\nWBC×Temp"]
+    D --> E["preprocess_data()\nffill/bfill per patient\nfillna(0), Gender encode"]
+    E --> F["XGBClassifier\ntree_method=hist, device=cuda\nn_estimators=300, max_depth=5"]
+    F --> G["models/sepsissense_xgb.pkl\nmodels/feature_columns.pkl"]
+    G --> H["app/streamlit_app.py"]
+    H --> I["Dashboard\nPredict Risk\nAnalytics\nAbout"]
+    I --> J["SepsisModelExplainer\nSHAP TreeExplainer\nper-patient risk score"]
 ```
 
-## 🚀 Quick Start
+### Component Overview
 
-### Installation
+| Component | File | Role |
+|-----------|------|------|
+| Preprocessing (class) | `src/preprocess.py` | `SepsisDataPreprocessor` — ffill/bfill, outlier capping, StandardScaler, LabelEncoder, temporal features |
+| Feature Engineering (class) | `src/feature_engineering.py` | `SepsisFeatureEngineer` — rolling stats, trend/slope, stability, SOFA scores, interaction features |
+| Training pipeline (functions) | `src/train_model.py` | `run_pipeline()` — loads `.psv` files, adds rolling + clinical features, trains XGBoost (GPU), saves model |
+| Training pipeline (class) | `src/train_model.py` | `SepsisModelTrainer` — XGBoost + LightGBM, temporal patient-level split, comprehensive metrics |
+| Explainability | `src/explain_model.py` | `SepsisModelExplainer` — SHAP TreeExplainer, per-patient waterfall/dashboard, global importance |
+| Web application | `app/streamlit_app.py` | 4-page Streamlit app; loads `sepsissense_xgb.pkl` + `feature_columns.pkl`, live metrics |
+| Test & demo generation | `test_demo.py` | `SepsisSenseTestSuite` — unit tests for all pipeline stages; `DemoDataGenerator` — CSV fixtures |
+| End-to-end demo | `demo_script.py` | CLI demo of the full pipeline on synthetic data |
 
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/yourusername/SepsisSense.git
-   cd SepsisSense
-   ```
+---
 
-2. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
+## Project Structure
 
-3. **Run the web application**:
-   ```bash
-   streamlit run app/streamlit_app.py
-   ```
+```
+sepsisence-ta-mlops-project/
+├── app/
+│   └── streamlit_app.py          # Streamlit web app (4 pages)
+├── models/
+│   ├── sepsissense_xgb.pkl       # Trained XGBoost model (generated by training)
+│   ├── feature_columns.pkl       # Ordered feature list (generated by training)
+│   └── feature_importance.png    # Top-20 feature importance chart (generated by training)
+├── notebooks/
+│   ├── 01_eda.ipynb              # Exploratory data analysis
+│   ├── 02_feature_eng.ipynb      # Feature engineering experiments
+│   ├── 03_modeling.ipynb         # Model development
+│   └── 04_train_pipeline.ipynb   # Full training pipeline notebook
+├── src/
+│   ├── preprocess.py             # SepsisDataPreprocessor class + create_sample_dataset()
+│   ├── feature_engineering.py    # SepsisFeatureEngineer class
+│   ├── train_model.py            # SepsisModelTrainer class + run_pipeline() for PhysioNet data
+│   ├── train_model_new.py        # Alternate trainer (XGBoost + LightGBM class version)
+│   └── explain_model.py          # SepsisModelExplainer class (SHAP)
+├── count_rows.py                 # Utility: counts PhysioNet .psv rows and prints split sizes
+├── debug_models.py               # Debug script: tests all pipeline imports end-to-end
+├── demo_script.py                # CLI demo on synthetic data
+├── test_app.py                   # Minimal Streamlit smoke test
+├── test_demo.py                  # Full test suite + DemoDataGenerator
+├── DATA_DOWNLOAD.md              # PhysioNet data download instructions
+├── QUICKSTART.md                 # Quick start guide
+└── requirements.txt              # Python dependencies
+```
 
-### Usage
+> `physionet.org/` (raw training data) is excluded from version control via `.gitignore`.
+> `models/*.pkl` files are also gitignored and must be generated locally by running the training pipeline.
 
-1. **Upload Patient Data**: Use CSV upload or manual entry form
-2. **Get Predictions**: View real-time sepsis risk (0-100%)
-3. **Understand Results**: Examine SHAP explanations for key features
-4. **Monitor Trends**: Track patient vitals over time
-5. **Clinical Alerts**: Receive notifications when risk exceeds thresholds
+---
 
-## 📊 Model Performance
+## MLOps / ML Implementation
 
-| Metric | Score |
-|--------|-------|
-| **ROC-AUC** | 0.87+ |
-| **PR-AUC** | 0.82+ |
-| **F1-Score** | 0.79+ |
-| **Recall@Precision≥0.8** | 0.75+ |
-| **Prediction Window** | 6 hours |
+### Data
 
-## 🔬 Technical Details
+- **Source**: PhysioNet Challenge 2019 — pipe-separated `.psv` files, one per patient.
+- **Structure**: Each file contains hourly ICU observations (vital signs + lab values + demographics + `SepsisLabel`).
+- **Synthetic fallback**: `create_sample_dataset()` in `src/preprocess.py` generates realistic synthetic data when real data is unavailable.
 
-### Data Processing Pipeline
-- **Missing Value Handling**: Forward/backward fill per patient timeline
-- **Feature Normalization**: StandardScaler for continuous variables
-- **Rolling Windows**: 6-hour statistical features (mean, std, slope)
-- **Time-Series Features**: Trend analysis for vital signs
+### Training Workflow (`src/train_model.py → run_pipeline()`)
+
+```
+1. load_data(data_dir)            — glob all .psv files, concat with Patient column
+2. add_rolling_features(df, window=6)  — 6-hour rolling means for HR, MAP, Temp, Resp, O2Sat
+3. add_clinical_features(df)      — 7 derived features (see Feature Engineering below)
+4. preprocess_data(df)            — per-patient ffill→bfill→fillna(0), Gender encoding
+5. train_test_split(stratify=y, test_size=0.2)
+6. train_model(X_train, y_train)  — XGBClassifier (GPU hist, 300 trees, depth 5, scale_pos_weight capped at 10)
+7. evaluate_model(...)            — Accuracy, Precision, Recall, F1, ROC-AUC; saves feature_importance.png
+8. save_model(...)                — joblib → models/sepsissense_xgb.pkl + models/feature_columns.pkl
+```
+
+Run with real PhysioNet data:
+```bash
+python -m src.train_model
+```
 
 ### Feature Engineering
-- **Vital Signs**: Heart Rate, MAP, SpO₂, Temperature, Respiration Rate
-- **Laboratory Values**: WBC, Platelets, Lactate, Creatinine, Bilirubin
-- **Demographics**: Age, Gender, ICU Type, Admission Source
-- **Temporal Features**: Time since admission, hour of day, day of week
 
-### Model Architecture
-- **Primary Model**: XGBoost with class imbalance handling
-- **Alternative**: LightGBM for faster inference
-- **Optional**: LSTM/GRU for sequential patterns
-- **Explainability**: SHAP TreeExplainer for feature importance
+**Rolling features** (added in `add_rolling_features`):
+- 6-hour rolling mean for: `HR`, `MAP`, `Temp`, `Resp`, `O2Sat`
 
-## 🎨 Web Interface Features
+**Clinical features** (added in `add_clinical_features`):
 
-### 🖥️ Dashboard Components
-- **Risk Gauge**: Color-coded sepsis probability meter
-- **Feature Importance**: Interactive SHAP value charts
-- **Vital Trends**: Real-time patient monitoring graphs
-- **Alert System**: Threshold-based clinical notifications
-- **Data Upload**: Drag-and-drop CSV or manual entry
+| Feature | Formula |
+|---------|---------|
+| `shock_index` | HR / SBP |
+| `modified_shock_index` | HR / MAP |
+| `qsofa_score` | (Resp ≥ 22) + (SBP ≤ 100) |
+| `hr_trend_3h` | HR[t] − HR[t−3] per patient |
+| `map_trend_3h` | MAP[t] − MAP[t−3] per patient |
+| `lactate_creatinine_ratio` | Lactate / (Creatinine + 1e-6) |
+| `wbc_temp_interaction` | WBC × Temp |
 
-### 🎭 UI/UX Design
-- **Modern Styling**: Custom CSS with healthcare color schemes
-- **Animations**: Smooth transitions and loading effects
-- **Responsiveness**: Mobile-friendly design
-- **Accessibility**: Screen reader support and keyboard navigation
+**Advanced features** (available via `SepsisFeatureEngineer` class):
+- Rolling statistics across windows of 2, 4, 6, 8, 12 hours (mean, std, min, max, median, count, range, CV)
+- Trend slopes and acceleration per vital over 4, 6, 8-hour windows (linear regression)
+- Stability scores and variability trends per vital
+- Change point detection (sudden changes vs. running std)
+- Simplified SOFA sub-scores: respiratory (O2Sat), cardiovascular (MAP), renal (Creatinine), hepatic (Bilirubin), coagulation (Platelets)
+- Interaction features: HR/MAP, HR/O2Sat, Lactate/MAP, Resp/O2Sat, shock indices
+- Patient-specific baseline deviations (first 4 hours as baseline)
 
-## 📈 Performance Optimization
+### Model
 
-- **Caching**: Streamlit cache for model loading and predictions
-- **Vectorization**: NumPy/Pandas optimized operations
-- **Model Compression**: Optimized pickle serialization
-- **Memory Management**: Efficient data structures for large datasets
+| Parameter | Value |
+|-----------|-------|
+| Algorithm | XGBoost (`XGBClassifier`) |
+| `tree_method` | `hist` |
+| `device` | `cuda` (falls back to CPU) |
+| `n_estimators` | 300 |
+| `max_depth` | 5 |
+| `learning_rate` | 0.05 |
+| `subsample` / `colsample_bytree` | 0.8 |
+| `scale_pos_weight` | neg/pos ratio, capped at 10.0 |
+| `eval_metric` | `auc` |
 
-## 🔒 Security & Compliance
+Alternative: `SepsisModelTrainer` class supports both XGBoost and LightGBM with temporal patient-level splits (train/val/test by patient ID, not by row).
 
-- **Data Privacy**: No patient data storage by default
-- **HIPAA Considerations**: Secure data handling protocols
-- **Audit Trails**: Prediction logging for clinical review
-- **Input Validation**: Robust data sanitization
+### Inference Workflow (Streamlit app)
 
-## 🧪 Testing & Validation
+```
+1. Load models/sepsissense_xgb.pkl + models/feature_columns.pkl
+2. Collect patient input (manual form or built-in demo patient)
+3. Build 10-record temporal sequence with slight variations
+4. add_rolling_features() → add_clinical_features() → preprocess_data()
+5. Align columns to feature_columns order, fill missing with 0
+6. model.predict_proba(X)[:, 1] → risk score [0, 1]
+7. SepsisModelExplainer.explain_single_prediction() → SHAP contributions
+8. Display gauge, SHAP waterfall, feature importance bar chart
+```
 
-- **Unit Tests**: Comprehensive test suite for all modules
-- **Integration Tests**: End-to-end pipeline validation
-- **Model Validation**: Cross-validation and holdout testing
-- **Clinical Validation**: Healthcare professional review process
+### Model Storage
 
-## 📚 Documentation
+Generated artifacts (not tracked in git):
+- `models/sepsissense_xgb.pkl` — trained XGBoost model (joblib)
+- `models/feature_columns.pkl` — ordered list of training feature names (joblib)
+- `models/feature_importance.png` — top-20 feature importance plot
 
-### For Developers
-- **API Documentation**: Detailed function and class references
-- **Architecture Guide**: System design and component interactions
-- **Deployment Guide**: Production environment setup
+### Evaluation Metrics
 
-### For Healthcare Professionals
-- **Clinical Guide**: Medical interpretation of predictions
-- **Feature Explanations**: Clinical significance of model inputs
-- **Alert Protocols**: Recommended response to high-risk predictions
+The training pipeline computes and prints:
 
-## 🤝 Contributing
+| Metric | Description |
+|--------|-------------|
+| ROC-AUC | Area under ROC curve |
+| PR-AUC | Average precision score |
+| F1 Score | Harmonic mean of precision and recall |
+| Accuracy | Overall classification accuracy |
+| Precision | Positive predictive value |
+| Recall / Sensitivity | True positive rate |
+| Specificity | True negative rate |
+| Recall @ Precision ≥ 0.8 | Recall when precision threshold is met |
 
-We welcome contributions from the healthcare AI community! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
+The Streamlit dashboard computes these metrics live at startup on a synthetic evaluation set built from the same preprocessing pipeline used during training.
 
-### Development Setup
+### Class Imbalance Handling
+
+- `scale_pos_weight` is automatically derived from the neg/pos ratio in the training set and capped at `10.0` to limit false alarms.
+- `SepsisModelTrainer` uses `sklearn.utils.class_weight.compute_class_weight('balanced')`.
+
+---
+
+## Web Application
+
+Run locally:
 ```bash
-# Install development dependencies
-pip install -r requirements-dev.txt
+streamlit run app/streamlit_app.py
+```
+Opens at `http://localhost:8501`.
 
-# Run tests
-pytest tests/
+### Pages
 
-# Run linting
+| Page | Content |
+|------|---------|
+| Dashboard | Live model metrics (accuracy, ROC-AUC, F1, precision); sample patient demo with animated gauge and vital signs chart |
+| Predict Risk | Manual patient entry form (vitals + labs); builds temporal sequence; returns risk score, SHAP bar chart, waterfall, clinical summary |
+| Analytics | Validation metric charts (bar + grouped); synthetic dataset statistics |
+| About | System description and medical disclaimer |
+
+### Configurable Alert Threshold
+
+A sidebar slider sets the `decision_threshold` (default `0.70`). The app implements a consecutive-hour alert filter: a confirmed sepsis alert fires only when risk exceeds the threshold for two consecutive hourly records.
+
+| Threshold Range | Mode |
+|-----------------|------|
+| ≥ 0.70 | High Precision — fewer false alarms |
+| 0.40 – 0.70 | Balanced |
+| ≤ 0.40 | High Recall — catches more early cases |
+
+---
+
+## Development Workflow
+
+### Setup
+
+```bash
+git clone <repo-url>
+cd sepsisence-ta-mlops-project
+pip install -r requirements.txt
+```
+
+### Data Download
+
+See [DATA_DOWNLOAD.md](DATA_DOWNLOAD.md). Expected layout after extraction:
+
+```
+physionet.org/files/challenge-2019/1.0.0/training/
+├── training_setA/    ← p000001.psv … 
+└── training_setB/    ← p100001.psv …
+```
+
+The app runs without real data — it generates synthetic patients automatically.
+
+### Train Model (PhysioNet data)
+
+```bash
+python -m src.train_model
+```
+
+### Run End-to-End Demo (synthetic data)
+
+```bash
+python demo_script.py
+```
+
+### Generate Test Data and Run Test Suite
+
+```bash
+python test_demo.py
+```
+
+Runs 5 test stages: preprocessing → feature engineering → model training → explainability → end-to-end scenarios. Results saved to `data/processed/test_results.json`.
+
+### Debug Pipeline Imports
+
+```bash
+python debug_models.py
+```
+
+### Count PhysioNet Dataset Size
+
+```bash
+python count_rows.py
+```
+*(Update `data_dir` in the script to your local path.)*
+
+### Linting
+
+```bash
 flake8 src/ app/
 black src/ app/
 ```
 
-## 📄 License
+---
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## Dependencies
 
-## 🙏 Acknowledgments
+Core libraries (from `requirements.txt`):
 
-- **PhysioNet Challenge 2019**: For providing the sepsis detection dataset
-- **Healthcare Partners**: For clinical validation and feedback
-- **Open Source Community**: For the amazing ML and visualization libraries
-
-## 📞 Support & Contact
-
-- **Issues**: [GitHub Issues](https://github.com/yourusername/SepsisSense/issues)
-- **Documentation**: [Wiki](https://github.com/yourusername/SepsisSense/wiki)
-- **Email**: sepsissense@healthcare-ai.com
+| Library | Purpose |
+|---------|---------|
+| `xgboost` | Primary model |
+| `lightgbm` | Alternative model |
+| `scikit-learn` | Preprocessing, metrics, splits |
+| `shap` | Model explainability |
+| `streamlit` | Web application |
+| `plotly` | Interactive charts |
+| `pandas`, `numpy` | Data processing |
+| `scipy` | Rolling regression, peak detection |
+| `joblib` | Model serialization |
+| `matplotlib`, `seaborn` | Feature importance plots |
 
 ---
 
-**⚠️ Important Medical Disclaimer**: This system is for research and educational purposes. Always consult qualified healthcare professionals for medical decisions. Not approved for clinical use without proper validation and regulatory approval.
+## Deployment Notes
+
+- No Docker, Kubernetes, or CI/CD configuration files are present in this repository.
+- The app is designed to be run locally or deployed to [Streamlit Community Cloud](https://streamlit.io/cloud).
+- GPU training (`device="cuda"`) is used when available; XGBoost falls back to CPU automatically.
+- No patient data is persisted by the application — all processing is in-memory per session.
 
 ---
 
-*Built with ❤️ for better healthcare outcomes*
+## Medical Disclaimer
+
+⚠️ This system is for research and educational purposes only. It is not approved for clinical use without proper validation and regulatory approval. Always consult qualified healthcare professionals for medical decisions.
+
+---
+
+*Dataset: PhysioNet Challenge 2019 (ODbL License — see [DATA_DOWNLOAD.md](DATA_DOWNLOAD.md))*
