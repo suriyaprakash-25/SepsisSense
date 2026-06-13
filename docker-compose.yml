@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  sepsissense-web:
+    build: .
+    container_name: sepsissense-app
+    ports:
+      - "8501:8501"
+    restart: unless-stopped
+    volumes:
+      - ./models:/app/models
+    environment:
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+      - PYTHONUNBUFFERED=1

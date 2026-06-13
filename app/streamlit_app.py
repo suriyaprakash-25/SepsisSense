@@ -730,16 +730,26 @@ def load_sample_data():
 @st.cache_resource(show_spinner="🤖 Loading AI configuration...")
 def load_models():
     """Load trained models and preprocessors."""
+    import logging
+    import traceback
+    log = logging.getLogger(__name__)
+
     try:
         model_path = os.path.join(os.path.dirname(__file__), '..', 'models', 'sepsissense_xgb.pkl')
         features_path = os.path.join(os.path.dirname(__file__), '..', 'models', 'feature_columns.pkl')
 
         if not os.path.exists(model_path) or not os.path.exists(features_path):
-            st.error("❌ Pre-trained models not found in models/ directory.")
+            log.error("Pre-trained models not found in models/ directory.")
             return None
 
         model = joblib.load(model_path)
         feature_names = joblib.load(features_path)
+
+        # Force CPU inference to avoid CUDA crashes inside Streamlit server thread
+        try:
+            model.set_params(device='cpu', predictor='cpu_predictor')
+        except Exception:
+            pass
 
         # Create explainer (SHAP disabled to avoid initialisation errors at load time)
         explainer = SepsisModelExplainer(model=model, model_type='xgboost')
@@ -748,8 +758,6 @@ def load_models():
         explainer.explainer = None
 
         # ── Compute REAL metrics from the loaded model ─────────────────────
-        # We generate a synthetic evaluation set via the same preprocess pipeline
-        # used during training so all metric figures are derived from the model itself.
         live_metrics = {}
         try:
             from sklearn.metrics import (
@@ -782,15 +790,17 @@ def load_models():
             pre = precision_score(y_eval, y_pred, zero_division=0)
             rec = recall_score(y_eval, y_pred, zero_division=0)
 
-            # Specificity / sensitivity
             if len(np.unique(y_eval)) > 1:
-                tn, fp, fn, tp = confusion_matrix(y_eval, y_pred).ravel()
+                cm = confusion_matrix(y_eval, y_pred)
+                if cm.size == 4:
+                    tn, fp, fn, tp = cm.ravel()
+                else:
+                    tn = int(cm[0, 0]); fp = fn = tp = 0
                 spec = tn / (tn + fp) if (tn + fp) > 0 else 0.0
                 sens = tp / (tp + fn) if (tp + fn) > 0 else 0.0
             else:
                 spec = sens = 0.0
 
-            # Recall at Precision >= 0.8
             if len(np.unique(y_eval)) > 1:
                 prec_vals, rec_vals, _ = precision_recall_curve(y_eval, y_proba)
                 mask = prec_vals >= 0.8
@@ -799,39 +809,33 @@ def load_models():
                 r80 = 0.0
 
             live_metrics = {
-                'roc_auc': round(roc, 3),
-                'pr_auc':  round(pr,  3),
-                'f1_score': round(f1, 3),
-                'accuracy': round(acc, 3),
-                'precision': round(pre, 3),
-                'recall':   round(rec, 3),
-                'specificity': round(spec, 3),
-                'sensitivity': round(sens, 3),
-                'recall_at_precision_80': round(r80, 3),
+                'roc_auc':   float(round(float(roc), 3)),
+                'pr_auc':    float(round(float(pr),  3)),
+                'f1_score':  float(round(float(f1),  3)),
+                'accuracy':  float(round(float(acc), 3)),
+                'precision': float(round(float(pre), 3)),
+                'recall':    float(round(float(rec), 3)),
+                'specificity': float(round(float(spec), 3)),
+                'sensitivity': float(round(float(sens), 3)),
+                'recall_at_precision_80': float(round(float(r80), 3)),
             }
+            log.info(f"Live metrics computed: {live_metrics}")
         except Exception as _metric_err:
-            # If metric computation fails, store an empty dict — the analytics page
-            # will fall back gracefully on its own.
-            import logging
-            logging.getLogger(__name__).warning(f"Live metric computation failed: {_metric_err}")
+            log.warning(f"Live metric computation failed: {_metric_err}\n{traceback.format_exc()}")
             live_metrics = {}
         # ───────────────────────────────────────────────────────────────────
 
-        st.success("✅ Models loaded successfully!")
-
+        log.info("Models loaded successfully.")
         return {
             'model': model,
             'explainer': explainer,
             'feature_names': feature_names,
             'model_metrics': {'validation': live_metrics},
+            'load_error': None,
         }
     except Exception as e:
-        import traceback
-        error_details = traceback.format_exc()
-        st.error(f"❌ Error loading models: {str(e)}")
-        with st.expander("🔍 View Error Details"):
-            st.code(error_details, language='python')
-        return None
+        logging.getLogger(__name__).error(f"Error loading models: {e}\n{traceback.format_exc()}")
+        return {'load_error': str(e)}
 
 def get_risk_color(risk_score):
     """Get color based on risk score."""
@@ -1005,9 +1009,13 @@ def main():
     # Load models
     with st.spinner("🔄 Loading AI models..."):
         models = load_models()
-    
+
     if not models:
         st.error("Failed to load models. Please check the setup.")
+        st.stop()
+
+    if models.get('load_error'):
+        st.error(f"❌ Error loading models: {models['load_error']}")
         st.stop()
     
     # Initialize session state for page navigation
@@ -1102,7 +1110,7 @@ def show_dashboard(models):
     live_precision = f"{_m.get('precision',0):.2f}"  if _m else "N/A"
 
     # Quick Stats — values sourced from the real model
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2 = st.columns(2)
 
     with col1:
         st.markdown(f"""
@@ -1117,22 +1125,6 @@ def show_dashboard(models):
         <div class="metric-card fade-in">
             <div class="metric-value">{live_roc_auc}</div>
             <div class="metric-label">ROC-AUC Score</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col3:
-        st.markdown(f"""
-        <div class="metric-card fade-in">
-            <div class="metric-value">{live_f1}</div>
-            <div class="metric-label">F1 Score</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col4:
-        st.markdown(f"""
-        <div class="metric-card fade-in">
-            <div class="metric-value">{live_precision}</div>
-            <div class="metric-label">Precision</div>
         </div>
         """, unsafe_allow_html=True)
 
