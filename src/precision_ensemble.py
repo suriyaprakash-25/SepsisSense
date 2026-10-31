@@ -30,8 +30,12 @@ import lightgbm as lgb
 
 try:
     from src.precision_engineering import PrecisionOptimizer, compute_physionet_utility
+    from src.conformal_uncertainty import ConformalSepsisPredictor
+    from src.path_signatures import VitalSignSignatureExtractor
 except ImportError:
     from precision_engineering import PrecisionOptimizer, compute_physionet_utility
+    from conformal_uncertainty import ConformalSepsisPredictor
+    from path_signatures import VitalSignSignatureExtractor
 
 if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -68,6 +72,8 @@ class SepsisPrecisionEnsemble(BaseEstimator, ClassifierMixin):
         self.models: Dict[str, Any] = {}
         self.meta_learner: Optional[LogisticRegression] = None
         self.optimizer: PrecisionOptimizer = PrecisionOptimizer(target_precision=target_precision)
+        self.conformal_predictor: ConformalSepsisPredictor = ConformalSepsisPredictor(alpha=0.05, target_precision=target_precision)
+        self.signature_extractor: VitalSignSignatureExtractor = VitalSignSignatureExtractor(window_hours=6)
         self.feature_names: List[str] = []
         self.is_fitted: bool = False
 
@@ -170,11 +176,16 @@ class SepsisPrecisionEnsemble(BaseEstimator, ClassifierMixin):
 
         logger.info("Calibrating posterior probabilities and thresholding for target precision...")
         val_probas = self._raw_predict_proba(eval_X)[:, 1]
-        self.optimizer.fit_calibrator(eval_y.values if isinstance(eval_y, pd.Series) else eval_y, val_probas)
-        best_threshold = self.optimizer.find_optimal_threshold(
-            eval_y.values if isinstance(eval_y, pd.Series) else eval_y, val_probas
-        )
+        eval_y_arr = eval_y.values if isinstance(eval_y, pd.Series) else eval_y
+        self.optimizer.fit_calibrator(eval_y_arr, val_probas)
+        best_threshold = self.optimizer.find_optimal_threshold(eval_y_arr, val_probas)
         logger.info(f"SepsisPrecisionEnsemble fitted successfully. Optimal threshold: {best_threshold:.4f}")
+
+        # ── 6. Conformal Calibration & Epistemic Uncertainty ─────────────────
+        logger.info("Calibrating inductive conformal predictor for statistical coverage...")
+        calib_pos = self.optimizer.calibrate(val_probas)
+        eval_X_arr = eval_X.values if isinstance(eval_X, pd.DataFrame) else eval_X
+        self.conformal_predictor.calibrate(eval_y_arr, calib_pos, eval_X_arr)
 
         self.is_fitted = True
         return self
@@ -226,6 +237,43 @@ class SepsisPrecisionEnsemble(BaseEstimator, ClassifierMixin):
             )
 
         return (probas >= t).astype(int)
+
+    def predict_conformal(
+        self,
+        X: Union[pd.DataFrame, np.ndarray],
+        alpha: Optional[float] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Predict with statistical conformal guarantees and epistemic uncertainty quantification.
+        Returns prediction sets {0}, {1}, {0, 1} [Indeterminate], epistemic uncertainty,
+        and bedside action recommendations.
+        """
+        if alpha is not None and alpha != self.conformal_predictor.alpha:
+            self.conformal_predictor.alpha = float(alpha)
+
+        calibrated_probas = self.predict_proba(X)[:, 1]
+
+        # Extract individual model probabilities for ensemble disagreement
+        if isinstance(X, pd.DataFrame):
+            X_arr = X.reindex(columns=self.feature_names, fill_value=0.0).values
+        else:
+            X_arr = np.asarray(X, dtype=np.float32)
+
+        member_probas = []
+        for m_name, model in self.models.items():
+            member_probas.append(model.predict_proba(X_arr)[:, 1])
+
+        return self.conformal_predictor.predict_sets(
+            probas=calibrated_probas,
+            X=X_arr,
+            model_member_probas=member_probas if len(member_probas) > 1 else None
+        )
+
+    def extract_path_signatures(self, df_trajectory: pd.DataFrame) -> Dict[str, float]:
+        """
+        Extract rough path signatures from patient vital signs trajectory window.
+        """
+        return self.signature_extractor.extract_trajectory_signatures(df_trajectory)
 
     def evaluate_comprehensive(
         self,
