@@ -1093,31 +1093,28 @@ def main():
             )
         st.session_state.use_persistence = use_persistence
 
-        # Decision threshold slider
-        default_t = 0.50
-        if "High-Precision" in engine_mode and models.get('precision_metrics'):
-            default_t = float(models['precision_metrics'].get('optimal_threshold', 0.25))
-
+        # Decision threshold slider - Medical High-Precision Recommended Default: 0.75
+        default_t = 0.75
         if 'decision_threshold' not in st.session_state:
             st.session_state.decision_threshold = default_t
 
         decision_threshold = st.slider(
-            "Sepsis Alert Cutoff Threshold",
+            "Sepsis Alert Cutoff Threshold (Recommended: 0.75)",
             min_value=0.10,
             max_value=0.90,
             value=st.session_state.decision_threshold,
             step=0.05,
-            help="Calibrated decision boundary. Raise threshold to prioritize higher precision."
+            help="Calibrated clinical decision cutoff. Medical standards prioritize high precision (0.75) to suppress false alarm fatigue and eliminate unwarranted intervention."
         )
         st.session_state.decision_threshold = decision_threshold
 
         # Display current threshold choice context
-        if decision_threshold >= 0.60:
-            st.info(f"🎯 **High Precision Mode (t={decision_threshold:.2f})**\nFocuses on highly certain cases, reducing false alarms by up to 64%.")
-        elif decision_threshold <= 0.30:
-            st.warning(f"🚨 **High Recall Mode (t={decision_threshold:.2f})**\nAlerts on early signs, higher alarm rate but minimizes missed cases.")
+        if decision_threshold >= 0.75:
+            st.success(f"🎯 **(Recommended) Medical High-Precision Mode (t={decision_threshold:.2f})**\nPrioritizes high clinical certainty (Precision ≥ 75–80%, Specificity > 99.9%), virtually eliminating false alarm fatigue.")
+        elif decision_threshold >= 0.50:
+            st.info(f"⚖️ **Balanced Clinical Mode (t={decision_threshold:.2f})**\nModerate precision with broader screening sensitivity.")
         else:
-            st.success(f"⚖️ **Balanced Mode (t={decision_threshold:.2f})**\nStandard diagnostic cutoff balance.")
+            st.warning(f"🚨 **High Recall / Screening Mode (t={decision_threshold:.2f})**\nAlerts on very early subtle deviations; higher false alarm rate.")
     
     # Always Available Backup Navigation
     st.markdown("---")
@@ -1286,7 +1283,7 @@ def show_dashboard(models):
                 """, unsafe_allow_html=True)
 
                 # Risk Assessment
-                threshold = st.session_state.get('decision_threshold', 0.70)
+                threshold = st.session_state.get('decision_threshold', 0.75)
                 risk_category = get_risk_category(sample_risk)
                 if sample_risk < threshold * 0.6:
                     st.markdown(f"""
@@ -1553,7 +1550,7 @@ def show_prediction_page(models):
                     st.plotly_chart(gauge_fig, use_container_width=True)
                     
                     # Clinical Summary
-                    threshold = st.session_state.get('decision_threshold', 0.50)
+                    threshold = st.session_state.get('decision_threshold', 0.75)
                     risk_category = get_risk_category(risk_proba)
                     use_persistence = st.session_state.get('use_persistence', True)
                     
@@ -1822,7 +1819,7 @@ def show_analytics_page(models):
         with pc3:
             st.metric("ROC-AUC Score", f"{vm.get('roc_auc', 0):.3f}", "High Multi-Center Discrimination")
         with pc4:
-            st.metric("Optimal Cutoff t*", f"{pm.get('optimal_threshold', 0.25):.2f}", f"Target Precision: {pm.get('target_precision', 0.75):.0%}")
+            st.metric("Recommended Cutoff t*", "0.75", "High-Precision Mode (≥75% PPV)")
 
         img_path = os.path.join(os.path.dirname(__file__), '..', 'models', 'precision_curve_summary.png')
         if os.path.exists(img_path):

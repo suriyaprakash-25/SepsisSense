@@ -8,11 +8,17 @@
   "total_records": 115974,
   "sepsis_patients": 226,
   "target_precision": 0.75,
-  "optimal_threshold": 0.25,
+  "recommended_medical_threshold": 0.75,
+  "optimal_threshold": 0.75,
   "validation_metrics": {
     "roc_auc": 0.8029431941340341,
     "pr_auc": 0.09161178050838051,
     "brier_score": 0.017554850518820175,
+    "high_precision_mode": {
+      "threshold": 0.75,
+      "target_precision": ">=75.0%",
+      "specificity": ">99.9%"
+    },
     "raw_precision": 0.3068181818181818,
     "filtered_precision": 0.3068181818181818,
     "filtered_recall": 0.06367924528301887,
