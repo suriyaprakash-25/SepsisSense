@@ -36,7 +36,7 @@ stqdm>=0.0.4
 # File Handling & Data Processing
 openpyxl>=3.0.9
 xlrd>=2.0.1
-pyarrow>=6.0.0
+pyarrow>=14.0.0,<16.0.0
 
 # Statistical Analysis
 scipy>=1.7.0

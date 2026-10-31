@@ -1,0 +1,29 @@
+{
+  "timestamp": "2026-10-31T18:23:46Z",
+  "data_sources": [
+    "PhysioNet_SetA",
+    "PhysioNet_SetB"
+  ],
+  "total_patients": 3000,
+  "total_records": 115974,
+  "sepsis_patients": 226,
+  "target_precision": 0.75,
+  "optimal_threshold": 0.25,
+  "validation_metrics": {
+    "roc_auc": 0.8029431941340341,
+    "pr_auc": 0.09161178050838051,
+    "brier_score": 0.017554850518820175,
+    "raw_precision": 0.3068181818181818,
+    "filtered_precision": 0.3068181818181818,
+    "filtered_recall": 0.06367924528301887,
+    "filtered_f1": 0.10546874999999999,
+    "specificity": 0.9972431870565373,
+    "physionet_utility": -0.7253888855555566,
+    "confusion_matrix": {
+      "tn": 22066,
+      "fp": 61,
+      "fn": 397,
+      "tp": 27
+    }
+  }
+}
