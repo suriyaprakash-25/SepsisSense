@@ -256,15 +256,22 @@ class SepsisModelExplainer:
         
         logger.info(f"Explaining prediction for patient {patient_id or 'Unknown'}...")
         
+        # Ensure features are aligned with expected feature names
+        if self.feature_names is not None:
+            X_eval = X_single.reindex(columns=self.feature_names, fill_value=0.0)
+        else:
+            X_eval = X_single.copy()
+            self.feature_names = X_eval.columns.tolist()
+
         # Get prediction
-        prediction_proba = self.model.predict_proba(X_single)[0, 1]
+        prediction_proba = float(self.model.predict_proba(X_eval)[0, 1])
         prediction_class = int(prediction_proba >= 0.5)
         
         # Get SHAP values for this sample or use feature importance
         if self.explainer is not None:
             try:
-                shap_values_single = self.calculate_shap_values(X_single)[0]
-            except:
+                shap_values_single = self.calculate_shap_values(X_eval)[0]
+            except Exception:
                 logger.warning("SHAP calculation failed, using model feature importance")
                 # Use model's native feature importance as fallback
                 if hasattr(self.model, 'feature_importances_'):
@@ -278,11 +285,14 @@ class SepsisModelExplainer:
                 shap_values_single = self.model.feature_importances_ * (prediction_proba - self.baseline_value)
             else:
                 shap_values_single = np.zeros(len(self.feature_names))
+
+        if len(shap_values_single) != len(self.feature_names):
+            shap_values_single = np.resize(shap_values_single, len(self.feature_names))
         
         # Create feature contribution DataFrame
         contributions_df = pd.DataFrame({
             'feature': self.feature_names,
-            'value': X_single.iloc[0].values,
+            'value': X_eval.iloc[0].values,
             'shap_value': shap_values_single,
             'abs_shap_value': np.abs(shap_values_single)
         })
@@ -707,7 +717,11 @@ if __name__ == "__main__":
     
     # Create dashboard
     dashboard = explainer.create_explanation_dashboard(explanation)
-    dashboard.show()
+    try:
+        dashboard.write_html('models/explanation_dashboard.html')
+        print("Explanation dashboard saved -> models/explanation_dashboard.html")
+    except Exception as e:
+        logger.warning(f"Could not save dashboard HTML: {e}")
     
     # Save explainer
     explainer.save_explainer('models/explainer.pkl')

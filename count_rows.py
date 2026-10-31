@@ -1,7 +1,13 @@
 import glob
 import os
+import sys
 
-data_dir = r'd:\Vscode\SepsisSense\physionet.org\files\challenge-2019\1.0.0\training'
+if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
+data_dir = os.path.join(
+    os.path.dirname(__file__), "physionet.org", "files", "challenge-2019", "1.0.0", "training"
+)
 files = glob.glob(os.path.join(data_dir, '**', '*.psv'), recursive=True)
 
 total_rows = 0

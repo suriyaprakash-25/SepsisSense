@@ -747,7 +747,7 @@ def load_models():
 
         # Force CPU inference to avoid CUDA crashes inside Streamlit server thread
         try:
-            model.set_params(device='cpu', predictor='cpu_predictor')
+            model.set_params(device='cpu')
         except Exception:
             pass
 
@@ -1391,12 +1391,14 @@ def show_prediction_page(models):
             'PTT': np.nan,
             'Fibrinogen': np.nan,
             # Other fields
+            'EtCO2': np.nan,
             'HospAdmTime': -admission_time,
             'SepsisLabel': 0  # Unknown
         }
         
         # Create temporal sequence (multiple time points for trend features)
         patient_records = []
+        rng = np.random.RandomState(abs(hash(str(patient_id))) % (2**31 - 1))
         
         # Create 10 time points with slight variations to enable trend calculation
         for i in range(10):
@@ -1405,7 +1407,7 @@ def show_prediction_page(models):
             
             # Add small realistic variations to vital signs for trend calculation
             if i > 0:  # Keep first record as baseline
-                variation_factor = 0.95 + (0.1 * np.random.random())  # ±5% variation
+                variation_factor = 0.95 + (0.1 * rng.random())  # ±5% variation deterministically
                 
                 # Vary vital signs slightly
                 record['HR'] = hr * variation_factor
@@ -1413,8 +1415,8 @@ def show_prediction_page(models):
                 record['DBP'] = dbp * variation_factor
                 record['MAP'] = map_val * variation_factor
                 record['Resp'] = resp * variation_factor
-                record['Temp'] = temp + (np.random.random() - 0.5) * 0.5  # ±0.25°C
-                record['O2Sat'] = min(100, o2sat + (np.random.random() - 0.5) * 2)  # ±1%
+                record['Temp'] = temp + (rng.random() - 0.5) * 0.5  # ±0.25°C
+                record['O2Sat'] = min(100, o2sat + (rng.random() - 0.5) * 2)  # ±1%
                 
                 # Vary lab values slightly if they're not NaN
                 if not np.isnan(wbc): record['WBC'] = wbc * variation_factor

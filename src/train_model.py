@@ -106,61 +106,76 @@ class SepsisModelTrainer:
     
     def prepare_temporal_split(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """
-        Prepare temporal-aware train/validation/test split.
+        Prepare temporal-aware, patient-stratified train/validation/test split.
+        Splits by Patient (not individual records) to prevent data leakage,
+        while ensuring proportional sepsis prevalence in all splits.
         
         Args:
-            df: Input dataframe with ICULOS column
+            df: Input dataframe with ICULOS and Patient columns
             
         Returns:
             Tuple of (train_df, val_df, test_df)
         """
         logger.info("Preparing data with temporal-aware splitting...")
         
-        # Sort by patient and time
-        df_sorted = df.sort_values(['Patient', 'ICULOS']).copy()
+        patient_col = 'Patient' if 'Patient' in df.columns else df.columns[0]
+        time_col = 'ICULOS' if 'ICULOS' in df.columns else df.columns[1]
+        target_col = 'SepsisLabel' if 'SepsisLabel' in df.columns else df.columns[-1]
         
-        # Split patients (not records) to prevent data leakage
-        unique_patients = df_sorted['Patient'].unique()
+        # Sort by patient and time
+        df_sorted = df.sort_values([patient_col, time_col]).copy()
+        
+        unique_patients = df_sorted[patient_col].unique()
         n_patients = len(unique_patients)
         
         # Ensure minimum patients for split
         if n_patients < 3:
             logger.warning(f"Only {n_patients} patients available. Using simple split.")
-            # Use simple random split if too few patients
             train_df = df_sorted
             val_df = df_sorted.sample(frac=0.1, random_state=42) if len(df_sorted) > 10 else df_sorted.head(1)
             test_df = df_sorted.sample(frac=0.1, random_state=43) if len(df_sorted) > 10 else df_sorted.head(1)
         else:
-            # Calculate split sizes
-            test_size = max(1, int(n_patients * self.config['test_size']))
-            val_size = max(1, int(n_patients * self.config['val_size']))
-            train_size = n_patients - test_size - val_size
+            # Stratified split by patient-level sepsis outcome
+            patient_labels = df_sorted.groupby(patient_col)[target_col].max()
+            pos_patients = patient_labels[patient_labels == 1].index.tolist()
+            neg_patients = patient_labels[patient_labels == 0].index.tolist()
             
-            # Ensure at least 1 patient in each set
-            if train_size < 1:
-                train_size = 1
-                val_size = max(1, (n_patients - 1) // 2)
-                test_size = n_patients - train_size - val_size
+            def split_items(items, test_frac, val_frac):
+                n = len(items)
+                if n == 0:
+                    return [], [], []
+                n_test = max(1 if (n >= 4 and test_frac > 0) else 0, int(round(n * test_frac)))
+                n_val = max(1 if (n >= 4 and val_frac > 0) else 0, int(round(n * val_frac)))
+                n_train = n - n_test - n_val
+                if n_train < 1:
+                    n_train = 1
+                    if n_test > 0: n_test -= 1
+                    elif n_val > 0: n_val -= 1
+                return items[:n_train], items[n_train:n_train + n_val], items[n_train + n_val:]
             
-            # Split patients
-            train_patients = unique_patients[:train_size]
-            val_patients = unique_patients[train_size:train_size + val_size]
-            test_patients = unique_patients[train_size + val_size:]
+            pos_train, pos_val, pos_test = split_items(pos_patients, self.config['test_size'], self.config['val_size'])
+            neg_train, neg_val, neg_test = split_items(neg_patients, self.config['test_size'], self.config['val_size'])
             
-            # Create splits
-            train_df = df_sorted[df_sorted['Patient'].isin(train_patients)]
-            val_df = df_sorted[df_sorted['Patient'].isin(val_patients)]
-            test_df = df_sorted[df_sorted['Patient'].isin(test_patients)]
+            train_patients = pos_train + neg_train
+            val_patients = pos_val + neg_val
+            test_patients = pos_test + neg_test
+            
+            # Fallback if any set empty
+            if len(val_patients) == 0: val_patients = train_patients[:1]
+            if len(test_patients) == 0: test_patients = train_patients[-1:]
+            
+            train_df = df_sorted[df_sorted[patient_col].isin(train_patients)].copy()
+            val_df = df_sorted[df_sorted[patient_col].isin(val_patients)].copy()
+            test_df = df_sorted[df_sorted[patient_col].isin(test_patients)].copy()
         
-        logger.info(f"Data split - Patients: {len(train_df['Patient'].unique())} train, {len(val_df['Patient'].unique())} val, {len(test_df['Patient'].unique())} test")
+        logger.info(f"Data split - Patients: {len(train_df[patient_col].unique())} train, {len(val_df[patient_col].unique())} val, {len(test_df[patient_col].unique())} test")
         logger.info(f"Data split - Records: {len(train_df)} train, {len(val_df)} val, {len(test_df)} test")
         
-        train_sepsis_rate = train_df['SepsisLabel'].mean() if len(train_df) > 0 else 0
-        val_sepsis_rate = val_df['SepsisLabel'].mean() if len(val_df) > 0 else 0
-        test_sepsis_rate = test_df['SepsisLabel'].mean() if len(test_df) > 0 else 0
+        train_sepsis_rate = train_df[target_col].mean() if len(train_df) > 0 else 0
+        val_sepsis_rate = val_df[target_col].mean() if len(val_df) > 0 else 0
+        test_sepsis_rate = test_df[target_col].mean() if len(test_df) > 0 else 0
         
         logger.info(f"Sepsis rates - Train: {train_sepsis_rate:.3f}, Val: {val_sepsis_rate:.3f}, Test: {test_sepsis_rate:.3f}")
-        
         return train_df, val_df, test_df
     
     def prepare_features_and_target(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series]:
@@ -358,7 +373,8 @@ class SepsisModelTrainer:
             model_metrics['xgboost'] = {
                 'train': train_metrics,
                 'validation': val_metrics,
-                'test': test_metrics
+                'test': test_metrics,
+                **test_metrics,
             }
         
         # LightGBM
@@ -374,7 +390,8 @@ class SepsisModelTrainer:
             model_metrics['lightgbm'] = {
                 'train': train_metrics,
                 'validation': val_metrics,
-                'test': test_metrics
+                'test': test_metrics,
+                **test_metrics,
             }
         
         # Select best model based on validation AUC
@@ -536,13 +553,13 @@ def add_clinical_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # 1. Shock Index
     if "HR" in df.columns and "SBP" in df.columns:
-        df["shock_index"] = df["HR"] / (df["SBP"] + 1e-6)
+        df["shock_index"] = (df["HR"] / (df["SBP"] + 1e-6)).fillna(0.0)
     else:
         df["shock_index"] = 0.0
 
     # 2. Modified Shock Index
     if "HR" in df.columns and "MAP" in df.columns:
-        df["modified_shock_index"] = df["HR"] / (df["MAP"] + 1e-6)
+        df["modified_shock_index"] = (df["HR"] / (df["MAP"] + 1e-6)).fillna(0.0)
     else:
         df["modified_shock_index"] = 0.0
 
@@ -565,13 +582,13 @@ def add_clinical_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # 6. Lactate / Creatinine ratio
     if "Lactate" in df.columns and "Creatinine" in df.columns:
-        df["lactate_creatinine_ratio"] = df["Lactate"] / (df["Creatinine"] + 1e-6)
+        df["lactate_creatinine_ratio"] = (df["Lactate"] / (df["Creatinine"] + 1e-6)).fillna(0.0)
     else:
         df["lactate_creatinine_ratio"] = 0.0
 
     # 7. WBC * Temp interaction
     if "WBC" in df.columns and "Temp" in df.columns:
-        df["wbc_temp_interaction"] = df["WBC"] * df["Temp"]
+        df["wbc_temp_interaction"] = (df["WBC"] * df["Temp"]).fillna(0.0)
     else:
         df["wbc_temp_interaction"] = 0.0
 
@@ -593,6 +610,17 @@ def train_model(X_train: pd.DataFrame, y_train: pd.Series) -> "xgb.XGBClassifier
     scale_pos_weight = min(scale_pos_weight, 10.0)
     logger.info(f"scale_pos_weight (capped) = {scale_pos_weight:.2f}  (neg={neg:,}, pos={pos:,})")
 
+    device = "cpu"
+    try:
+        # Check if CUDA device can be utilized
+        test_m = xgb.XGBClassifier(device="cuda", n_estimators=1)
+        test_m.fit(np.zeros((2, 2)), np.array([0, 1]))
+        device = "cuda"
+    except Exception:
+        device = "cpu"
+
+    logger.info(f"Using XGBoost compute device: {device}")
+
     model = xgb.XGBClassifier(
         n_estimators=300,
         max_depth=5,
@@ -602,14 +630,13 @@ def train_model(X_train: pd.DataFrame, y_train: pd.Series) -> "xgb.XGBClassifier
         scale_pos_weight=scale_pos_weight,
         random_state=42,
         eval_metric="auc",
-        use_label_encoder=False,
         tree_method="hist",
-        device="cuda",
+        device=device,
         n_jobs=-1,
         verbosity=0,
     )
     model.fit(X_train, y_train)
-    logger.info("XGBoost GPU training complete.")
+    logger.info(f"XGBoost training complete on {device}.")
     return model
 
 
@@ -720,13 +747,24 @@ def run_pipeline(data_dir: str = None) -> None:
     # STEP 3.5 — Clinical Features
     df = add_clinical_features(df)
 
-    # STEP 2 — Preprocess (strips Patient / SepsisLabel, fills NaN)
-    X, y = preprocess_data(df)
-
-    # STEP 5 — Train / test split (stratified)
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
+    # STEP 5 — Train / test split (patient-level stratified split to prevent record leakage)
+    if "Patient" in df.columns:
+        patient_outcomes = df.groupby("Patient")["SepsisLabel"].max()
+        train_pts, test_pts = train_test_split(
+            patient_outcomes.index,
+            test_size=0.2,
+            random_state=42,
+            stratify=patient_outcomes.values
+        )
+        df_train = df[df["Patient"].isin(train_pts)].copy()
+        df_test = df[df["Patient"].isin(test_pts)].copy()
+        X_train, y_train = preprocess_data(df_train)
+        X_test, y_test = preprocess_data(df_test)
+    else:
+        X, y = preprocess_data(df)
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42, stratify=y
+        )
     print(f"  -> Train: {X_train.shape[0]:,} rows  |  Test: {X_test.shape[0]:,} rows")
 
     # STEP 4 — Train
@@ -736,7 +774,7 @@ def run_pipeline(data_dir: str = None) -> None:
     evaluate_model(model, X_test, y_test, plot=True)
 
     # STEP 7 & 8 — Save model + feature list
-    save_model(model, list(X.columns))
+    save_model(model, list(X_train.columns))
 
     print("\n" + "=" * 56)
     print("  [OK]  Pipeline complete!")

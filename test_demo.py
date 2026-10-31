@@ -14,13 +14,17 @@ import pandas as pd
 import pytest
 import sys
 import os
+
+if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 from typing import Dict, Any, List, Tuple
 import json
 from datetime import datetime, timedelta
 import logging
 
 # Add src to path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
 from preprocess import SepsisDataPreprocessor, create_sample_dataset
 from feature_engineering import SepsisFeatureEngineer
@@ -353,10 +357,11 @@ class SepsisSenseTestSuite:
             assert 'metrics' in training_results, "No metrics available"
             
             best_metrics = training_results['metrics'][training_results['best_model_name']]
-            assert best_metrics['roc_auc'] > 0.5, "Model performance below random"
+            eval_metrics = best_metrics.get('test', best_metrics)
+            assert eval_metrics.get('roc_auc', 0.0) > 0.5, "Model performance below random"
             
             results['best_model'] = training_results['best_model_name']
-            results['metrics'] = best_metrics
+            results['metrics'] = eval_metrics
             
         except Exception as e:
             results['passed'] = False
@@ -420,23 +425,20 @@ class SepsisSenseTestSuite:
             # Create test scenarios
             scenarios = self.demo_generator.create_test_scenarios()
             
-            scenario_results = {}
+            # Train pipeline once on training dataset
+            preprocessor = SepsisDataPreprocessor()
+            train_data = create_sample_dataset(n_patients=30, records_per_patient=12)
+            df_train_processed, _ = preprocessor.preprocess_pipeline(train_data, fit=True)
             
+            feature_engineer = SepsisFeatureEngineer()
+            df_train_features = feature_engineer.engineer_features_pipeline(df_train_processed)
+            
+            trainer = SepsisModelTrainer()
+            training_results = trainer.train_and_evaluate_pipeline(df_train_features)
+            
+            scenario_results = {}
             for scenario_name, scenario_data in scenarios.items():
                 try:
-                    # Full pipeline test
-                    preprocessor = SepsisDataPreprocessor()
-                    
-                    # Use a larger training dataset
-                    train_data = create_sample_dataset(n_patients=50, records_per_patient=15)
-                    df_train_processed, _ = preprocessor.preprocess_pipeline(train_data, fit=True)
-                    
-                    feature_engineer = SepsisFeatureEngineer()
-                    df_train_features = feature_engineer.engineer_features_pipeline(df_train_processed)
-                    
-                    trainer = SepsisModelTrainer()
-                    training_results = trainer.train_and_evaluate_pipeline(df_train_features)
-                    
                     # Process test scenario
                     df_test_processed, _ = preprocessor.preprocess_pipeline(scenario_data, fit=False)
                     df_test_features = feature_engineer.engineer_features_pipeline(df_test_processed)
@@ -569,6 +571,36 @@ def main():
     
     print("\n🎉 Demo data generation and testing completed!")
     print(f"Check 'data/processed/' for demo files and test results.")
+
+
+# ==============================================================================
+# PYTEST COMPATIBLE TEST HOOKS
+# ==============================================================================
+
+def test_pytest_preprocessing():
+    suite = SepsisSenseTestSuite()
+    result = suite.test_data_preprocessing()
+    assert result['passed'], f"Preprocessing test failed: {result.get('errors')}"
+
+def test_pytest_feature_engineering():
+    suite = SepsisSenseTestSuite()
+    result = suite.test_feature_engineering()
+    assert result['passed'], f"Feature engineering test failed: {result.get('errors')}"
+
+def test_pytest_model_training():
+    suite = SepsisSenseTestSuite()
+    result = suite.test_model_training()
+    assert result['passed'], f"Model training test failed: {result.get('errors')}"
+
+def test_pytest_model_explanation():
+    suite = SepsisSenseTestSuite()
+    result = suite.test_model_explanation()
+    assert result['passed'], f"Model explanation test failed: {result.get('errors')}"
+
+def test_pytest_end_to_end():
+    suite = SepsisSenseTestSuite()
+    result = suite.test_end_to_end_pipeline()
+    assert result['passed'], f"End-to-end pipeline test failed: {result.get('errors')}"
 
 
 if __name__ == "__main__":

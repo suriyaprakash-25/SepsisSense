@@ -1,0 +1,56 @@
+{
+  "model_performance": {
+    "train": {
+      "roc_auc": 1.0,
+      "pr_auc": 0.9999999999999999,
+      "f1_score": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "accuracy": 1.0,
+      "recall_at_precision_80": 1.0,
+      "specificity": 1.0,
+      "sensitivity": 1.0
+    },
+    "validation": {
+      "roc_auc": 0.9998062991515904,
+      "pr_auc": 0.9992756818614538,
+      "f1_score": 0.9753086419753086,
+      "precision": 1.0,
+      "recall": 0.9518072289156626,
+      "accuracy": 0.9898477157360406,
+      "recall_at_precision_80": 1.0,
+      "specificity": 1.0,
+      "sensitivity": 0.9518072289156626
+    },
+    "test": {
+      "roc_auc": 0.9997806536521168,
+      "pr_auc": 0.9993280578653515,
+      "f1_score": 0.967032967032967,
+      "precision": 1.0,
+      "recall": 0.9361702127659575,
+      "accuracy": 0.9844155844155844,
+      "recall_at_precision_80": 1.0,
+      "specificity": 1.0,
+      "sensitivity": 0.9361702127659575
+    },
+    "roc_auc": 0.9997806536521168,
+    "pr_auc": 0.9993280578653515,
+    "f1_score": 0.967032967032967,
+    "precision": 1.0,
+    "recall": 0.9361702127659575,
+    "accuracy": 0.9844155844155844,
+    "recall_at_precision_80": 1.0,
+    "specificity": 1.0,
+    "sensitivity": 0.9361702127659575
+  },
+  "sample_prediction": {
+    "patient_id": "DEMO_PATIENT_001",
+    "risk_probability": 0.0027463675764812824,
+    "risk_category": "very_low"
+  },
+  "dataset_stats": {
+    "patients": 100,
+    "records": 1991,
+    "sepsis_rate": 0.21044701155198392
+  }
+}

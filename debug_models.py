@@ -5,6 +5,10 @@ Debug script to identify the model loading issue.
 
 import sys
 import traceback
+
+if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 sys.path.append('.')
 
 print("Testing model loading components...")
