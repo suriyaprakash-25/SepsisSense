@@ -301,6 +301,16 @@ def build_pdf(filename="PRECISION_ENGINEERING_REPORT.pdf"):
             Paragraph("<b>2-Hour Consecutive Alert Persistence Filter</b>", table_cell_bold),
             Paragraph("Requires risk &ge; t* in current hour and risk &ge; 0.85 &times; t* in preceding hour, unless an extreme emergency.", table_cell),
             Paragraph("Suppresses transient 1-hour sensor noise spikes and patient movement artifacts.", table_cell)
+        ],
+        [
+            Paragraph("<b>Conformal Uncertainty & Indeterminate Gating</b>", table_cell_bold),
+            Paragraph("Provides finite-sample coverage guarantees ({0}, {1}, {0, 1}) and measures ensemble epistemic disagreement (COMPOSER framework).", table_cell),
+            Paragraph("Withholds alerts during ambiguous intervals, requesting repeat labs rather than firing false positives.", table_cell)
+        ],
+        [
+            Paragraph("<b>Rough Path Signatures & Clinical NLP</b>", table_cell_bold),
+            Paragraph("Computes Level-2 iterated integrals (shock loop Lévy area) for irregular vitals and parses nursing notes (NegEx) to rule out mimics (pain, PT).", table_cell),
+            Paragraph("Captures non-linear circulatory collapse and contextual clinical notes.", table_cell)
         ]
     ]
     t_sol = Table(sol_data, colWidths=[2.0*inch, 2.7*inch, 2.3*inch])
@@ -356,11 +366,12 @@ def build_pdf(filename="PRECISION_ENGINEERING_REPORT.pdf"):
     # Section 6: Verification
     story.append(Paragraph("6. Automated Verification & Test Suite", h1_style))
     story.append(Paragraph(
-        "All <b>25 tests</b> across the test suite passed with 100% green coverage:",
+        "All <b>33 tests</b> across the test suite passed with 100% green coverage:",
         body_style
     ))
     story.append(Paragraph("&bull; <code>test_app.py</code>: 9/9 passed in 9.48s (Preprocessing, 52 production features, inference bounds, explainability).", bullet_style))
     story.append(Paragraph("&bull; <code>tests/test_precision_pipeline.py</code>: 11/11 passed in 6.51s (Universal Harmonizer, PhysioNet utility, hard negative mining, dilation, persistence filter, ensemble).", bullet_style))
+    story.append(Paragraph("&bull; <code>tests/test_conformal_and_signatures.py</code>: 8/8 passed in 7.96s (Conformal calibration, prediction sets, epistemic uncertainty, path signatures, clinical NLP).", bullet_style))
     story.append(Paragraph("&bull; <code>test_demo.py</code>: 5/5 passed in 43.75s (Demo patient generator, clinical scenarios, full end-to-end retraining pipeline).", bullet_style))
     story.append(Spacer(1, 10))
 

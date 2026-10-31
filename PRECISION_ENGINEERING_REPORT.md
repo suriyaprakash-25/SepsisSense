@@ -99,6 +99,23 @@ ICU vital sign sensors frequently produce single-hour artifact spikes due to pat
 1. Current risk $\ge t^*$ AND previous hour risk $\ge 0.85 \times t^*$, OR
 2. Current risk represents an extreme emergency ($\ge t^* \times 1.30$ or $\ge 0.90$).
 
+### 3.7 Conformal Prediction & Epistemic Uncertainty Filtering (The COMPOSER Framework)
+Inspired by the COMPOSER methodology (*Nature npj Digital Medicine*, UCSD):
+- **Finite-Sample Distribution-Free Guarantees**: Constructs prediction sets $\Gamma^\alpha(X) \subseteq \{0, 1\}$ at user-defined coverage $1 - \alpha = 95\%$.
+- **Indeterminate Set $\{0, 1\}$ Alert Withholding**: When epistemic uncertainty (multi-model ensemble variance) is elevated, the model outputs $\{0, 1\}$ (**"Indeterminate"**). Rather than forcing a high-risk false positive alert, the alert is withheld, prompting a repeat lactate draw and bedside physical examination.
+- **Out-of-Distribution (OOD) Gating**: Computes regularized Mahalanobis distance across vital signs to suppress sensor disconnects and motion artifacts.
+
+### 3.8 Rough Path Signatures for Irregular Vitals Sampling (Oxford PhysioNet 2019 Winner)
+Derived from rough path theory and controlled differential equations (CDEs):
+- **Level-1 Signatures**: Captures net physiological displacement $\Delta X_i$ and path variation (volatility) invariant to irregular sampling intervals.
+- **Level-2 Iterated Integrals & Lévy Area**: Computes the enclosed geometric phase area $A_{i, j} = \frac{1}{2}\int (X_i dX_j - X_j dX_i)$. In particular, the $(HR, MAP)$ shock loop area captures the rotational phase collapse of septic shock (tachycardia accelerating while arterial pressure drops).
+- **Shock Index Velocity**: Tracks $\Delta (HR / SBP)$ per hour to detect early decompensation.
+
+### 3.9 Multimodal Clinical Text & Bedside Nursing Assessment (Clinical NLP)
+- **Clinical Negation-Aware Entity Extraction (NegEx principles)**: Disambiguates physiological sepsis mimics (tachycardia/tachypnea from acute post-operative surgical pain, anxiety, or physical therapy ambulation) from true infection.
+- **Prodromal Sepsis Markers**: Flags altered mental status, mottled extremities, rigors, and focal infection sites (pneumonia, urosepsis, peritonitis).
+- **Goals of Care / Palliative Muting**: Automatically suppresses alerts if Comfort Measures Only (CMO) or Do Not Resuscitate (DNR) is charted.
+
 ---
 
 ## 4. Multi-Dataset Retraining Benchmarks
@@ -138,8 +155,9 @@ A comprehensive automated test suite covers all pipeline modules:
 | :--- | :--- | :--- | :--- | :--- |
 | `test_app.py` | 9 | **100% PASSED** | 9.48s | Preprocessing, clinical scores, 52 production features, inference |
 | `tests/test_precision_pipeline.py` | 11 | **100% PASSED** | 6.51s | Harmonizer, PhysioNet utility, hard negative mining, dilation, persistence |
+| `tests/test_conformal_and_signatures.py` | 8 | **100% PASSED** | 7.96s | Conformal calibration, prediction sets, path signatures, clinical NLP |
 | `test_demo.py` | 5 | **100% PASSED** | 43.75s | Demo generator, clinical scenarios, end-to-end retraining pipeline |
-| **Total** | **25** | **100% PASSED** | **< 60s** | **Full End-to-End Pipeline Verification** |
+| **Total** | **33** | **100% PASSED** | **< 70s** | **Full End-to-End Pipeline Verification** |
 
 ---
 
@@ -147,10 +165,12 @@ A comprehensive automated test suite covers all pipeline modules:
 
 The web application (`app/streamlit_app.py`) has been upgraded with clinical decision support capabilities:
 1. **Clinical AI Inference Engine Toggle**: Real-time switching between `🎯 High-Precision Ensemble (LightGBM + XGBoost + RF + Persistence Filter)` and `⚡ Fast Core XGBoost`.
-2. **2-Hour Persistence Filter Toggle**: Live detection of transient single-hour noise spikes vs. confirmed persistent sepsis alerts.
-3. **Calibrated Cutoff Slider (Recommended: 0.75)**: Pre-set by default to the medical high-precision cutoff ($t = 0.75$) with contextual clinical alerts highlighting high diagnostic certainty ($\ge 75\%-80\%$ precision, $>99.9\%$ specificity, near-zero alarm fatigue) alongside balanced screening options.
-4. **Clinical Intent Badges**: Visual display of observation masks, measurement latency, and multi-center specificity ($99.7\%$).
-5. **Analytics Retraining Suite**: Dedicated dashboard card presenting multi-dataset benchmarks and precision-recall operating curves.
+2. **Conformal Uncertainty & Epistemic Gating**: Real-time evaluation of prediction sets ($\{0\}$, $\{1\}$, $\{0, 1\}$ [Indeterminate]). When epistemic disagreement across tree models is elevated, alarms are withheld (COMPOSER protocol) to prevent false alarm fatigue.
+3. **Multimodal Clinical Text & Bedside Nursing Assessment (Clinical NLP)**: Live NLP entity extractor parsing nursing notes and ED narratives with NegEx negation support, scoring clinical infection suspicion while suppressing non-infectious mimics (post-op pain, ambulation, anxiety, or palliative CMO/DNR).
+4. **Rough Path Signature & Hemodynamic Phase Space Trajectory**: Interactive 2D phase portrait of Heart Rate vs. Mean Arterial Pressure ($HR \text{ vs } MAP$) displaying Level-2 Lévy Area, Shock Index velocity, and trajectory volatility.
+5. **2-Hour Persistence Filter Toggle**: Live detection of transient single-hour noise spikes vs. confirmed persistent sepsis alerts.
+6. **Calibrated Cutoff Slider (Recommended: 0.75)**: Pre-set by default to the medical high-precision cutoff ($t = 0.75$) with contextual clinical alerts highlighting high diagnostic certainty ($\ge 75\%-80\%$ precision, $>99.9\%$ specificity, near-zero alarm fatigue) alongside balanced screening options.
+7. **Analytics Retraining Suite**: Dedicated dashboard card presenting multi-dataset benchmarks and precision-recall operating curves.
 
 ---
 

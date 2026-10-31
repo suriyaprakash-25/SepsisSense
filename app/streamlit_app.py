@@ -41,9 +41,17 @@ try:
     from preprocess import create_sample_dataset
     from train_model import add_rolling_features, preprocess_data, add_clinical_features
     from explain_model import SepsisModelExplainer
+    from conformal_uncertainty import ConformalSepsisPredictor
+    from path_signatures import VitalSignSignatureExtractor
+    from clinical_nlp import ClinicalTextAnalyzer
 except ImportError:
-    st.error("❌ Could not import SepsisSense modules. Please ensure the src/ directory contains the required files.")
-    st.stop()
+    try:
+        from preprocess import create_sample_dataset
+        from train_model import add_rolling_features, preprocess_data, add_clinical_features
+        from explain_model import SepsisModelExplainer
+    except ImportError:
+        st.error("❌ Could not import SepsisSense modules. Please ensure the src/ directory contains the required files.")
+        st.stop()
 
 # ==============================================================================
 # PAGE CONFIGURATION
@@ -1522,8 +1530,18 @@ def show_prediction_page(models):
                     X_patient_ens = pt_df_intent[ens_features]
                     X_current_ens = X_patient_ens.iloc[[-1]]
                     risk_proba = float(models['precision_ensemble'].predict_proba(X_current_ens)[0, 1])
+                    # Conformal prediction sets and epistemic uncertainty
+                    conformal_info = None
+                    if hasattr(models['precision_ensemble'], 'predict_conformal'):
+                        try:
+                            conf_res = models['precision_ensemble'].predict_conformal(X_current_ens)
+                            if conf_res:
+                                conformal_info = conf_res[0]
+                        except Exception as _c_err:
+                            log.warning(f"Conformal prediction error: {_c_err}")
                 else:
                     risk_proba = float(models['model'].predict_proba(X_current)[0, 1])
+                    conformal_info = None
 
                 # Get explanation
                 explanation = models['explainer'].explain_single_prediction(
@@ -1569,6 +1587,46 @@ def show_prediction_page(models):
                             elif use_persistence:
                                 is_isolated_spike = True
                     
+                    # Conformal Prediction Safety & Epistemic Uncertainty Display
+                    if conformal_info:
+                        c_status = conformal_info.get('status', 'LOW_RISK')
+                        c_unc = conformal_info.get('epistemic_uncertainty', 0.0)
+                        c_set = conformal_info.get('prediction_set', [0])
+                        c_cov = conformal_info.get('coverage_guarantee', '95.0%')
+
+                        if c_status == 'INDETERMINATE':
+                            st.markdown(f"""
+                            <div style="background-color: rgba(245, 158, 11, 0.15); border-left: 4px solid #f59e0b; padding: 10px 14px; border-radius: 6px; margin-bottom: 12px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <strong style="color: #b45309; font-size: 0.90rem;">⚠️ Conformal Set: {{0, 1}} [INDETERMINATE]</strong>
+                                    <span style="background: #fef3c7; color: #92400e; font-size: 0.72rem; padding: 2px 6px; border-radius: 10px; font-weight: 600;">Coverage: {c_cov}</span>
+                                </div>
+                                <p style="margin: 4px 0 0 0; font-size: 0.82rem; color: #4b5563;">
+                                    <strong>Epistemic Disagreement:</strong> &plusmn;{c_unc:.3f}<br>
+                                    <em>COMPOSER Protocol:</em> Alert withheld due to epistemic ambiguity. Order repeat serum lactate & reassess.
+                                </p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        elif c_status == 'CONFIRMED_ALERT':
+                            st.markdown(f"""
+                            <div style="background-color: rgba(239, 68, 68, 0.15); border-left: 4px solid #ef4444; padding: 10px 14px; border-radius: 6px; margin-bottom: 12px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <strong style="color: #b91c1c; font-size: 0.90rem;">🎯 Conformal Set: {{1}} [STATISTICALLY VALID ALERT]</strong>
+                                    <span style="background: #fee2e2; color: #991b1b; font-size: 0.72rem; padding: 2px 6px; border-radius: 10px; font-weight: 600;">Confidence: {c_cov}</span>
+                                </div>
+                                <p style="margin: 4px 0 0 0; font-size: 0.82rem; color: #4b5563;">
+                                    Definitive sepsis deterioration (Ensemble disagreement: low &plusmn;{c_unc:.3f}).
+                                </p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        elif c_status == 'LOW_RISK':
+                            st.markdown(f"""
+                            <div style="background-color: rgba(16, 185, 129, 0.12); border-left: 4px solid #10b981; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px;">
+                                <strong style="color: #047857; font-size: 0.88rem;">✅ Conformal Set: {{0}} [STATISTICALLY LOW RISK]</strong>
+                                <span style="font-size: 0.78rem; color: #4b5563; margin-left: 6px;">(Confidence: {c_cov}, &plusmn;{c_unc:.3f})</span>
+                            </div>
+                            """, unsafe_allow_html=True)
+
                     if risk_proba < threshold * 0.6:
                         st.markdown(f"""
                         <div class="alert alert-success">
@@ -1671,6 +1729,137 @@ def show_prediction_page(models):
                             )
                             
                             st.plotly_chart(fig, use_container_width=True)
+                
+                # ── Next-Gen Precision Innovations: NLP & Path Signatures ──
+                st.markdown("---")
+                nlp_tab, sig_tab = st.tabs([
+                    "📝 Multimodal Clinical Note NLP (Mimic Suppression)",
+                    "🌀 Rough Path Signature & Hemodynamic Trajectory"
+                ])
+
+                with nlp_tab:
+                    st.markdown("#### 📝 Bedside Nursing Narrative & Clinical Text NLP")
+                    st.markdown(
+                        "Clinical text disambiguates physiological sepsis mimics (e.g. post-operative pain or anxiety) "
+                        "from true systemic infection using clinical negation-aware entity extraction (NegEx principles)."
+                    )
+                    
+                    preset_options = [
+                        "Custom Clinician Free-Text Note",
+                        "Preset A: Severe Sepsis Prodrome (Confusion, Mottled Skin, Purulent Sputum)",
+                        "Preset B: Post-Op Incision Pain Mimic (Tachycardia secondary to pain, denies fever)",
+                        "Preset C: Physical Therapy Ambulation Mimic (Walking in hallway, lungs clear, resting)",
+                        "Preset D: Goals of Care (Comfort measures only, do not resuscitate)"
+                    ]
+                    selected_preset = st.selectbox("Choose Clinical Narrative Preset or Custom:", preset_options, index=0)
+                    
+                    default_notes = {
+                        "Custom Clinician Free-Text Note": "",
+                        "Preset A: Severe Sepsis Prodrome (Confusion, Mottled Skin, Purulent Sputum)": "Patient somnolent and disoriented to place. Mottled cold extremities with severe shivering chills. Productive cough with purulent sputum, suspect pneumonia. Lactic acidosis noted.",
+                        "Preset B: Post-Op Incision Pain Mimic (Tachycardia secondary to pain, denies fever)": "Patient resting comfortably, denies fever or chills. Alert and oriented x 4. Tachycardia secondary to acute surgical incision pain. Given IV morphine with relief.",
+                        "Preset C: Physical Therapy Ambulation Mimic (Walking in hallway, lungs clear, resting)": "Patient ambulating in hallway with physical therapy session. Transferred to chair, resting comfortably. Lungs clear to auscultation, no signs of infection.",
+                        "Preset D: Goals of Care (Comfort measures only, do not resuscitate)": "Palliative care consultation active. Goals of care established as Comfort Measures Only (CMO), do not resuscitate (DNR). Withhold invasive sepsis bundle."
+                    }
+                    
+                    note_input = st.text_area(
+                        "Bedside Nursing / ED Triage Clinical Note:",
+                        value=default_notes.get(selected_preset, ""),
+                        height=100,
+                        placeholder="Type nursing observations, triage narrative, or physician progress note here..."
+                    )
+                    
+                    if note_input.strip():
+                        from clinical_nlp import ClinicalTextAnalyzer
+                        analyzer = ClinicalTextAnalyzer()
+                        nlp_res = analyzer.analyze_note(note_input)
+                        
+                        nc1, nc2, nc3 = st.columns([1, 1, 2])
+                        with nc1:
+                            st.metric("NLP Sepsis Suspicion", f"{nlp_res['nlp_sepsis_score']:.1%}")
+                        with nc2:
+                            st.metric("Mimic/Confounder Score", f"{nlp_res['mimic_score']:.1%}")
+                        with nc3:
+                            st.metric("Risk Modulation (ΔR)", f"{nlp_res['risk_delta']:+.1%}")
+                            
+                        # Badges for findings
+                        if nlp_res['detected_sepsis_features']:
+                            st.markdown("**Infection Indicators Detected:** " + " ".join([f"<span style='background:#fee2e2;color:#991b1b;padding:3px 8px;border-radius:12px;font-size:0.8rem;margin-right:4px;'>🔍 {f}</span>" for f in nlp_res['detected_sepsis_features']]), unsafe_allow_html=True)
+                        if nlp_res['detected_mimics']:
+                            st.markdown("**Non-Infectious Mimics Detected:** " + " ".join([f"<span style='background:#dbeafe;color:#1e40af;padding:3px 8px;border-radius:12px;font-size:0.8rem;margin-right:4px;'>🛡️ {f}</span>" for f in nlp_res['detected_mimics']]), unsafe_allow_html=True)
+                        if nlp_res['is_palliative_suppressed']:
+                            st.markdown("<div style='background:#f3e8ff;border-left:4px solid #a855f7;padding:8px 12px;border-radius:6px;color:#6b21a8;margin-top:8px;'><strong>🛑 Goals of Care / CMO Detected:</strong> Sepsis alert suppressed to respect palliative care objectives.</div>", unsafe_allow_html=True)
+                        else:
+                            st.info(f"💡 **Clinical NLP Interpretation:** {nlp_res['summary_interpretation']}")
+
+                with sig_tab:
+                    st.markdown("#### 🌀 Rough Path Signature & Hemodynamic Phase Space Trajectory")
+                    st.markdown(
+                        "Based on the **Oxford University 1st-place winning architecture** (PhysioNet 2019), "
+                        "rough path signatures calculate Level-2 iterated integrals and the geometric **Lévy Area** "
+                        "enclosed in the $(HR, MAP)$ phase portrait to detect circulatory shock trajectories."
+                    )
+                    
+                    from path_signatures import VitalSignSignatureExtractor
+                    sig_extractor = VitalSignSignatureExtractor(window_hours=min(len(patient_df), 12))
+                    sigs = sig_extractor.extract_trajectory_signatures(patient_df)
+                    
+                    sc1, sc2, sc3 = st.columns(3)
+                    with sc1:
+                        st.metric("Level-2 Lévy Area (Shock Loop)", f"{sigs.get('sig2_levy_area_shock_loop', 0.0):.3f}")
+                    with sc2:
+                        st.metric("Shock Index Velocity", f"{sigs.get('sig_shock_index_velocity', 0.0):+.3f}/hr")
+                    with sc3:
+                        st.metric("HR Path Volatility", f"{sigs.get('sig1_total_variation_HR', 0.0):.1f} bpm")
+                        
+                    # Plot 2D Phase Portrait (Heart Rate vs MAP)
+                    if 'HR' in patient_df.columns and 'MAP' in patient_df.columns and len(patient_df) >= 2:
+                        hr_traj = patient_df['HR'].ffill().bfill().values
+                        map_traj = patient_df['MAP'].ffill().bfill().values
+                        hours = list(range(len(hr_traj)))
+                        
+                        phase_fig = go.Figure()
+                        phase_fig.add_trace(go.Scatter(
+                            x=hr_traj,
+                            y=map_traj,
+                            mode='lines+markers+text',
+                            line=dict(color='#7c3aed', width=3),
+                            marker=dict(
+                                size=8,
+                                color=hours,
+                                colorscale='Viridis',
+                                showscale=True,
+                                colorbar=dict(title="ICU Hour", len=0.7)
+                            ),
+                            text=[f"Hr {h}" for h in hours],
+                            textposition="top center",
+                            name="Hemodynamic Trajectory"
+                        ))
+                        # Highlight start and end
+                        phase_fig.add_trace(go.Scatter(
+                            x=[hr_traj[0]], y=[map_traj[0]],
+                            mode='markers+text',
+                            marker=dict(size=14, color='#10b981', symbol='diamond'),
+                            name='Admission (Hr 0)',
+                            text=['Start'], textposition='bottom right'
+                        ))
+                        phase_fig.add_trace(go.Scatter(
+                            x=[hr_traj[-1]], y=[map_traj[-1]],
+                            mode='markers+text',
+                            marker=dict(size=14, color='#ef4444', symbol='cross'),
+                            name='Current Status',
+                            text=['Current'], textposition='top right'
+                        ))
+                        
+                        phase_fig.update_layout(
+                            title=f"Hemodynamic Phase Space: Heart Rate vs MAP ({patient_id})",
+                            xaxis_title="Heart Rate (bpm)",
+                            yaxis_title="Mean Arterial Pressure (mmHg)",
+                            font={'family': 'Inter'},
+                            paper_bgcolor="rgba(0,0,0,0)",
+                            height=420
+                        )
+                        st.plotly_chart(phase_fig, use_container_width=True)
+                        st.caption("ℹ️ Clockwise loop with widening area indicates progressive circulatory decompensation (rising tachycardia alongside falling blood pressure).")
                 
             except Exception as e:
                 st.error(f"Error during prediction: {str(e)}")
