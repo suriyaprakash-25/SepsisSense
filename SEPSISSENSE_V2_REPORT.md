@@ -413,3 +413,4 @@ SepsisSense v2 is designed to ingest multi-center electronic health records acro
 * **Bedside Clinical Text NLP** with NegEx negation handling to eliminate physiological mimics,
 
 SepsisSense v2 delivers an **actionable, trusted, and mathematically rigorous early warning system** ready for bedside clinical decision support.
+
