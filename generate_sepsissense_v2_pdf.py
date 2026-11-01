@@ -343,3 +343,4 @@ def build_pdf(filename="SEPSISSENSE_V2_REPORT.pdf"):
 
 if __name__ == "__main__":
     build_pdf()
+

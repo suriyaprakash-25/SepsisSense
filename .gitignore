@@ -29,7 +29,6 @@ env.bak/
 venv.bak/
 
 # IDE
-.vscode/
 .idea/
 *.swp
 *.swo
@@ -69,3 +68,5 @@ logs/
 # Temporary files
 *.tmp
 *.temp
+config.bat
+node_modules
