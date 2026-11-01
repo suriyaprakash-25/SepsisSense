@@ -43,7 +43,7 @@ def compute_iterated_integral(
     x: np.ndarray,
     y: np.ndarray
 ) -> Tuple[float, float, float]:
-    """
+    r"""
     Compute Level-2 iterated integrals of a 2D continuous path (X, Y) using the trapezoidal rule:
     
     S_{1,2} = \int_0^T (X(t) - X(0)) dY(t)
@@ -186,3 +186,4 @@ class VitalSignSignatureExtractor:
         empty["sig_shock_index_velocity"] = 0.0
         empty["sig_shock_index_max"] = 0.70
         return empty
+

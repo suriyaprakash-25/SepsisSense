@@ -195,3 +195,4 @@ class TestEnsembleIntegration:
             assert "status" in item
             assert "epistemic_uncertainty" in item
             assert item["status"] in ["LOW_RISK", "CONFIRMED_ALERT", "INDETERMINATE", "OUT_OF_DISTRIBUTION", "ANOMALY"]
+
