@@ -1121,7 +1121,7 @@ def main():
 
         # Display current threshold choice context
         if decision_threshold >= 0.75:
-            st.success(f"🎯 **(Recommended) Medical High-Precision Mode (t={decision_threshold:.2f})**\nPrioritizes high clinical certainty (Precision ≥ 75–80%, Specificity > 99.9%), virtually eliminating false alarm fatigue.")
+            st.success(f"🎯 **(Recommended) Medical High-Precision Mode (t={decision_threshold:.2f})**\nPrioritizes specificity to reduce alarm fatigue (held-out PhysioNet: specificity 99.7%, precision 30.7%, recall 6.4%).")
         elif decision_threshold >= 0.50:
             st.info(f"⚖️ **Balanced Clinical Mode (t={decision_threshold:.2f})**\nModerate precision with broader screening sensitivity.")
         else:
@@ -2168,11 +2168,11 @@ def show_analytics_page(models):
         with pc1:
             st.metric("Multi-Center Cohort", f"{pm.get('total_patients', 0):,} Pts", f"{pm.get('total_records', 0):,} Records")
         with pc2:
-            st.metric("Clinical Specificity", f"{vm.get('specificity', 0):.2%}", "99.7% False Alarm Suppression")
+            st.metric("Clinical Specificity", f"{vm.get('specificity', 0):.2%}", "Held-out PhysioNet 2019", delta_color="off")
         with pc3:
-            st.metric("ROC-AUC Score", f"{vm.get('roc_auc', 0):.3f}", "High Multi-Center Discrimination")
+            st.metric("ROC-AUC Score", f"{vm.get('roc_auc', 0):.3f}", f"PR-AUC {vm.get('pr_auc', 0):.3f}", delta_color="off")
         with pc4:
-            st.metric("Recommended Cutoff t*", "0.75", "High-Precision Mode (≥75% PPV)")
+            st.metric("Recommended Cutoff t*", "0.75", f"PPV {vm.get('filtered_precision', 0):.1%} · Recall {vm.get('filtered_recall', 0):.1%}", delta_color="off")
 
         img_path = os.path.join(os.path.dirname(__file__), '..', 'models', 'precision_curve_summary.png')
         if os.path.exists(img_path):
@@ -2182,20 +2182,20 @@ def show_analytics_page(models):
     st.markdown("---")
     st.markdown("### 🌐 Multi-Center Federated Learning & Differential Privacy Network")
     st.markdown(
-        "Demonstrates multi-center collaborative learning across distributed hospital cohorts (**MIMIC-IV, AmsterdamUMCdb, eICU, HiRID**) "
+        "⚠️ **Simulation only:** illustrates the federated-learning prototype with simulated hospital nodes named after public ICU datasets (**MIMIC-IV, AmsterdamUMCdb, eICU, HiRID**); no real multi-centre data is used. "
         "using **DP-SGD (Differentially Private Stochastic Gradient Descent)** and **FedProx aggregation**. "
-        "Guarantees that raw patient protected health information (PHI) never leaves hospital firewalls while converging to a global consensus model."
+        "The figures below are illustrative, not clinical results."
     )
 
     fc1, fc2, fc3, fc4 = st.columns(4)
     with fc1:
         st.metric("Federated Hospitals", "4 Centers", "US, EU, Swiss Nodes")
     with fc2:
-        st.metric("Total Cohort Size", "124,500 Pts", "Distributed Training")
+        st.metric("Total Cohort Size", "Simulated", "Synthetic non-IID data", delta_color="off")
     with fc3:
-        st.metric("Privacy Budget (ε)", "0.82", "Strict DP (δ = 10⁻⁵)")
+        st.metric("Privacy Budget (ε)", "0.82", "Illustrative (δ = 10⁻⁵)", delta_color="off")
     with fc4:
-        st.metric("Global Consensus AUC", "0.914", "+0.042 over Isolated Models")
+        st.metric("Global AUC (simulated)", "0.914", "Synthetic data only", delta_color="off")
 
     # Interactive Federated Network Table & Governance
     col_net, col_dp = st.columns([3, 2])
@@ -2250,10 +2250,9 @@ def show_about_page():
     - Healthcare researchers and data scientists
     
     #### 📊 Performance Metrics
-    - ROC-AUC: 0.89+
-    - Precision-Recall AUC: 0.82+
-    - F1 Score: 0.79+
-    - Recall at 80% Precision: 0.75+
+    Held-out PhysioNet 2019 (3,000 patients, hourly, t = 0.75):
+    - ROC-AUC: 0.803 | PR-AUC: 0.092 | Brier: 0.018
+    - Specificity: 99.7% | Precision: 30.7% | Recall: 6.4%
     
     #### 🔐 Privacy & Security
     - HIPAA-compliant design considerations

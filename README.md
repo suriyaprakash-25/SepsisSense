@@ -1,15 +1,15 @@
-# 🩺 SepsisSense v1.7 — Enterprise Clinical AI & Precision Sepsis Resuscitation
+# 🩺 SepsisSense — Early Sepsis Prediction with Alarm-Fatigue-Aware Safety Layers (Research Prototype)
 
-[![Release](https://img.shields.io/badge/Release-v1.7%20Enterprise-blue?style=for-the-badge&logo=github)](https://github.com/suriyaprakash-25/SepsisSense)
+[![Release](https://img.shields.io/badge/Release-v1.7%20Research%20Prototype-blue?style=for-the-badge&logo=github)](https://github.com/suriyaprakash-25/SepsisSense)
 [![Tests](https://img.shields.io/badge/Tests-42%2F42%20Passed%20(100%25)-success?style=for-the-badge&logo=pytest)](https://github.com/suriyaprakash-25/SepsisSense)
 [![Python](https://img.shields.io/badge/Python-3.8%2B%20%7C%203.11-3776AB?style=for-the-badge&logo=python)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.28%2B-FF4B4B?style=for-the-badge&logo=streamlit)](https://streamlit.io/)
 [![XGBoost / LightGBM](https://img.shields.io/badge/Models-XGBoost%20%7C%20LightGBM%20%7C%20RF-orange?style=for-the-badge)](https://xgboost.readthedocs.io/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
-**SepsisSense v1.7** is a bleeding-edge, multi-tier clinical artificial intelligence platform for early sepsis detection, false-alarm suppression, and safe resuscitation guidance in intensive care units (ICUs) and emergency departments. 
+**SepsisSense** is a research prototype for early sepsis prediction in the ICU, trained and evaluated on the **PhysioNet/CinC 2019 Challenge** dataset (Sepsis-3 labels, hourly vitals and labs).
 
-Designed to solve the catastrophic **clinician alarm fatigue epidemic** (where legacy EHR models trigger 80%–90% false alarms), SepsisSense delivers **≥75%–80% Precision**, **>99.9% Specificity** (a 76× reduction in false alerts), **Conformal Epistemic Uncertainty Filtering**, **Rough Path Signatures**, **Multimodal Clinical NLP**, **Continuous Waveform Analytics**, **Differentially Private Federated Learning**, and **Surviving Sepsis Campaign-bounded Safe Reinforcement Learning**.
+The project focuses on **clinician alarm fatigue**: it prioritises specificity and calibrated probabilities over raw sensitivity, then adds safety layers (conformal uncertainty gating and a persistence filter) to suppress unreliable alerts. Several further research directions (path signatures, clinical NLP, waveform HRV, federated learning, safe RL) are implemented as **prototype modules** and are not yet validated on real patient data. See [Validated Results](#-validated-results-held-out-physionet-2019) and [Limitations](#-limitations--honest-assessment).
 
 ---
 
@@ -17,8 +17,9 @@ Designed to solve the catastrophic **clinician alarm fatigue epidemic** (where l
 
 - [Key Capabilities & Clinical Edge](#-key-capabilities--clinical-edge)
 - [System Architecture](#-system-architecture)
-- [Six Next-Gen Clinical AI Breakthroughs](#-six-next-gen-clinical-ai-breakthroughs)
-- [Comparative Performance Scorecard](#-comparative-performance-scorecard)
+- [Research Modules](#-research-modules)
+- [Validated Results](#-validated-results-held-out-physionet-2019)
+- [Limitations & Honest Assessment](#-limitations--honest-assessment)
 - [Project Directory Structure](#-project-directory-structure)
 - [Multimodal Bedside Clinical UI](#-multimodal-bedside-clinical-ui)
 - [Automated Verification & Test Harness](#-automated-verification--test-harness)
@@ -30,15 +31,19 @@ Designed to solve the catastrophic **clinician alarm fatigue epidemic** (where l
 
 ## ⚡ Key Capabilities & Clinical Edge
 
-1. **6-Hour Prodromal Early Warning**: Detects physiological and autonomic deterioration up to 6 hours before clinical sepsis onset, and up to 24 hours prior to blood pressure collapse using continuous telemetry waveforms.
-2. **76× False Positive Alarm Reduction**: Curbs false alarms from 1 in 13 hours (legacy v1) down to fewer than 1 in 1,000 hours ($>99.9\%$ specificity) through trajectory-preserving hard negative mining.
-3. **Diagnostic Certainty Mode ($t^* = 0.75$)**: Precision boosted from $<15\%$ to $\ge 75\%-80\%$, providing actionable alerts clinicians can trust.
-4. **Conformal Uncertainty Gating**: Statistically bounds prediction sets under a 95% coverage guarantee, automatically withholding alerts during ambiguous or artifact-heavy windows ($\Gamma = \{0, 1\}$).
-5. **Irregular Sampling Robustness**: Employs rough path signatures and iterated integrals to track 2D hemodynamic shock loops invariant to irregular clinical charting intervals.
-6. **Physiological Mimic Disambiguation**: Ingests bedside nursing free text with NegEx negation scope detection to suppress false alarms caused by post-operative pain, panic/anxiety, or physical therapy ambulation.
-7. **Continuous Waveform Dynamics**: Ingests 100 Hz ECG and Arterial Blood Pressure (ABP) streams, tracking Pan-Tompkins QRS, time/spectral HRV, Sample Entropy, the Sepsis Autonomic Blunting Index (SABI), and Pulse Pressure Variation (PPV).
-8. **Multi-Center Federated Learning**: Enables collaborative training across hospital cohorts (MIMIC-IV, AmsterdamUMCdb, eICU, HiRID) with DP-SGD ($L_2$ clip $C=1.0$, calibrated noise, $\epsilon \le 0.82$, $\delta = 10^{-5}$) guaranteeing zero raw PHI leaves hospital firewalls.
-9. **Safe Offline RL Resuscitation ("The AI Clinician")**: Delivers 4-hour IV fluid bolus and vasopressor titration recommendations bounded by deterministic Surviving Sepsis Campaign (SSC) safety guardrails (preventing ARDS pulmonary edema and mandating shock vasopressors).
+Status key: ✅ trained & evaluated on real PhysioNet data · 🧪 implemented & unit-tested, demonstrated on synthetic/simulated data only
+
+1. ✅ **Precision-oriented ensemble**: LightGBM + XGBoost + Random Forest soft-voting ensemble with isotonic calibration. Held-out ROC-AUC 0.803, specificity 99.7%, Brier score 0.018 (see [results](#-validated-results-held-out-physionet-2019)).
+2. ✅ **Early-warning labelling**: 6-hour backward label dilation, so the model is trained to flag the hours *before* Sepsis-3 onset.
+3. ✅ **Imbalance handling**: trajectory-preserving hard negative mining keeps all septic and non-septic SIRS ("look-alike") patients.
+4. ✅ **Missingness-as-signal features**: lab-ordering patterns used as a proxy for clinical suspicion.
+5. ✅ **2-hour persistence filter**: an alert must persist across consecutive hours, which suppresses isolated sensor spikes.
+6. 🧪 **Conformal uncertainty gating**: split-conformal prediction sets (α = 0.05); alerts are withheld when the set is indeterminate ($\Gamma = \{0, 1\}$).
+7. 🧪 **Rough path signatures**: Level-1/Level-2 iterated integrals and (HR, MAP) Lévy area as features robust to irregular sampling.
+8. 🧪 **Clinical-note NLP**: rule-based phrase matching with NegEx negation to flag infection signs and sepsis mimics (post-op pain, anxiety, ambulation).
+9. 🧪 **Waveform analytics**: Pan-Tompkins QRS detection, time/frequency HRV, Sample Entropy and ABP pulse-pressure variation. No real 100 Hz ICU waveforms have been used yet.
+10. 🧪 **Federated learning with DP-SGD**: simulated 4-node federation (logistic model, L2 clipping, Gaussian noise). It does **not** train on MIMIC-IV / eICU / HiRID; the node names are labels in the simulation.
+11. 🧪 **Safe-RL treatment recommender**: a 7-D state and a 25-action (fluid × vasopressor) grid, bounded by Surviving Sepsis Campaign guardrails. **The Q-function is not trained** (random initialisation), so recommendations are currently driven by the deterministic guardrails.
 
 ---
 
@@ -85,22 +90,27 @@ flowchart TD
 
 ---
 
-## 🔬 Six Next-Gen Clinical AI Breakthroughs
+## 🔬 Research Modules
 
-### 1. Conformal Epistemic Uncertainty Filtering (The COMPOSER Framework)
-* **Precedent**: Research published in *Nature npj Digital Medicine* (Nemati et al., UC San Diego).
+> All six modules below are **🧪 prototypes**: implemented and unit-tested, but not yet integrated into the trained pipeline or validated on real patient data. The literature listed under "Inspiration" motivated each design; this project does not reproduce those papers' results.
+
+### 1. Conformal Uncertainty Filtering
+* **Inspiration**: COMPOSER (Shashikumar, Nemati et al., *npj Digital Medicine*, UC San Diego).
+* **Status**: 🧪 Tested on synthetic data; not yet calibrated on the held-out PhysioNet split.
 * **Module**: [`src/conformal_uncertainty.py`](src/conformal_uncertainty.py)
 * **Mechanism**: Solves for conformal non-conformity quantile $\hat{q}$ on hold-out calibration data at significance level $\alpha = 0.05$ (guaranteeing 95% marginal coverage). Produces prediction sets $\Gamma^{0.05}(\mathbf{x}) \subseteq \{0, 1\}$. When ensemble trees diverge ($\sigma_{\text{ensemble}} > 0.15$), outputs **$\Gamma = \{0, 1\}$ [Indeterminate]** and suppresses the alert, instructing clinicians: *"Uncertainty elevated. Alert withheld to prevent alarm fatigue. Re-check serum lactate and vitals."*
 
 ### 2. Rough Path Signatures & Hemodynamic Shock Loops
-* **Precedent**: Oxford University 1st-Place Winning Architecture in the PhysioNet/CinC 2019 Global Sepsis Challenge (Morrill, Lyons et al.).
+* **Inspiration**: Signature-based approach of the PhysioNet/CinC 2019 winning team (Morrill, Kormilitzin, Lyons et al., Oxford).
+* **Status**: 🧪 Feature extractor implemented and tested; not yet added to the trained model's feature set.
 * **Module**: [`src/path_signatures.py`](src/path_signatures.py)
 * **Mechanism**: Models irregular vital streams as geometric paths $X(t) = (t, \text{HR}, \text{MAP}, \text{Resp}, \text{Temp})$. Extracts Level-1 displacements and Level-2 iterated integrals:
   $$A_{i, j} = \frac{1}{2} \int_0^T \Big( (X_i(s) - X_i(0)) dX_j(s) - (X_j(s) - X_j(0)) dX_i(s) \Big)$$
   The $(HR, MAP)$ **Shock Loop Area** isolates the rotational phase-space trajectory of circulatory collapse (tachycardia with collapsing blood pressure) from benign exertion (concordant HR and BP increases).
 
 ### 3. Bedside Clinical Text NLP (NegEx Integration)
-* **Precedent**: Studies in *The Lancet Digital Health* and *Chest* on physiological sepsis mimics.
+* **Inspiration**: NegEx (Chapman et al., 2001) and clinical literature on sepsis mimics.
+* **Status**: 🧪 Rule-based; tested on hand-written example notes. PhysioNet 2019 has no free text, so it has not been evaluated on real notes (MIMIC-IV-Note would be the next step).
 * **Module**: [`src/clinical_nlp.py`](src/clinical_nlp.py)
 * **Mechanism**: Parses unstructured nursing shift notes using rule-based phrase matchers and NegEx negation scope detection:
   * **Infection Phenotypes**: Detects altered mental status, mottled extremities, rigors, purulent sputum, and urosepsis.
@@ -108,20 +118,23 @@ flowchart TD
   * **Palliative Care Shield**: Automatically mutes alarms for Comfort Measures Only (CMO) or Do Not Resuscitate (DNR) patients.
 
 ### 4. Continuous Waveform High-Frequency Ingestion (ECG & ABP)
-* **Precedent**: *IEEE Transactions on Biomedical Engineering (TBME)*.
+* **Inspiration**: Pan & Tompkins (1985) QRS detection; literature linking reduced HRV and entropy to sepsis.
+* **Status**: 🧪 Signal-processing functions tested on generated ECG/ABP signals. No real ICU waveform data (e.g. MIMIC-III Waveform) has been processed yet, and no lead-time claim has been validated.
 * **Module**: [`src/waveform_analytics.py`](src/waveform_analytics.py)
-* **Mechanism**: Ingests 100 Hz continuous bedside telemetry. Extracts Pan-Tompkins QRS complexes, time-domain HRV (SDNN, RMSSD, pNN50), Welch spectral power (LF, HF, LF/HF), and Non-Linear Sample Entropy ($\text{SampEn}$). Computes the **Sepsis Autonomic Blunting Index (SABI)**, signaling systemic inflammatory autonomic collapse **12 to 24 hours prior to blood pressure collapse**. Measures Arterial Blood Pressure (ABP) dynamic Pulse Pressure Variation (PPV $\ge 13\%$ fluid responsiveness) and myocardial contractility ($dP/dt_{\max}$).
+* **Mechanism**: Designed for 100 Hz telemetry. Extracts Pan-Tompkins QRS complexes, time-domain HRV (SDNN, RMSSD, pNN50), Welch spectral power (LF, HF, LF/HF) and Sample Entropy. From arterial blood pressure (ABP) it measures pulse pressure variation (PPV ≥ 13% suggests fluid responsiveness) and $dP/dt_{\max}$. The dashboard shows an illustrative autonomic-blunting score derived from these features.
 
 ### 5. Multi-Center Federated Learning with Differential Privacy
-* **Precedent**: *The Lancet Digital Health* multi-center privacy-preserving AI consortium guidelines.
+* **Status**: 🧪 **Simulation only.** Four in-process "hospital" clients holding synthetic non-IID data train a logistic-regression model. No real multi-centre data is involved; the hospital names (MIMIC-IV, AmsterdamUMCdb, eICU, HiRID) are labels in the simulation.
 * **Module**: [`src/federated_learning.py`](src/federated_learning.py)
-* **Mechanism**: Connects distributed hospital nodes (MIMIC-IV, AmsterdamUMCdb, eICU, HiRID) via client-side DP-SGD:
-  * $L_2$ gradient clipping ($C = 1.0$) and calibrated Gaussian noise injection.
-  * Rényi Differential Privacy (RDP) accountant guaranteeing $(\epsilon \le 0.82, \delta = 10^{-5})$ so zero raw patient protected health information (PHI) crosses hospital firewalls.
-  * Asynchronous FedProx coordinator weighting heterogeneous hospital updates, boosting cross-hospital generalization by **$+0.042$ ROC-AUC**.
+* **Mechanism**:
+  * Client-side DP-SGD: $L_2$ gradient clipping ($C = 1.0$) and Gaussian noise injection.
+  * A simple cumulative ε counter (not a formal Rényi-DP accountant).
+  * FedAvg-style aggregation weighted by client sample size.
+  * **Known issue**: the FedProx proximal term currently evaluates to zero (`global_weights - global_weights`), so the code behaves as FedAvg.
 
 ### 6. Safe Offline Reinforcement Learning ("The AI Clinician")
-* **Precedent**: *Nature Medicine* (Komorowski et al.) & Surviving Sepsis Campaign (SSC) 2021 Guidelines.
+* **Inspiration**: The AI Clinician (Komorowski et al., *Nature Medicine* 2018) and the Surviving Sepsis Campaign 2021 guidelines.
+* **Status**: 🧪 **The Q-function is untrained** (random initialisation; no offline-RL training loop exists yet). Recommendations are currently driven by the deterministic guardrails below. Training with Conservative Q-Learning on MIMIC-IV trajectories is future work.
 * **Module**: [`src/safe_reinforcement_learning.py`](src/safe_reinforcement_learning.py)
 * **Mechanism**: Evaluates a 7D normalized clinical state vector $(\text{MAP}, \text{Lactate}, \text{Shock Index}, \text{SOFA}, PaO_2/FiO_2, \text{Urine Output}, \text{Fluid Balance})$ over a 25-action grid (5 fluid tiers $\times$ 5 vasopressor tiers), bounded by hard clinical safety guardrails:
   * **ARDS / Hypoxemia**: Fluid capped to $\le 250\,\text{mL}$ when $PaO_2/FiO_2 < 200$.
@@ -131,21 +144,39 @@ flowchart TD
 
 ---
 
-## 📊 Comparative Performance Scorecard
+## 📊 Validated Results (held-out PhysioNet 2019)
 
-| Clinical / Operational Dimension | Legacy Baseline (v1) | SepsisSense v1.7 (Enterprise) | Bedside Impact |
-|:---|:---:|:---:|:---|
-| **Clinical Specificity** | 92.40% | **> 99.90%** | Virtually zero false alarms |
-| **False Alarm Rate** | 7.60% (1 in 13h) | **< 0.10% (1 in 1,000h)** | **76× Reduction in Alarm Noise** |
-| **Positive Predictive Value (PPV)** | 8.20% – 15.0% | **≥ 75.0% – 80.0%** | **Diagnostic Certainty Mode** |
-| **Operating Cutoff ($t^*$)** | 0.500 (Heuristic) | **0.750 (Medical High-Precision)** | Tuned for clinical utility |
-| **ROC-AUC Score** | 0.781 | **0.803 – 0.914** | +0.022 single, +0.042 federated |
-| **Brier Probability Calibration** | 0.064 | **0.0176** | **3.6× Better Probability Accuracy** |
-| **Sensor Spike Immunity** | None (Flashes on tap) | **2-Hour Consecutive Filter** | Suppresses isolated artifacts |
-| **Ambiguous Data Handling** | Forces binary guess | **Conformal Gating ({0, 1})** | Withholds indeterminate alerts |
-| **Bedside Mimic Filtering** | Blind to nursing notes | **NegEx Clinical NLP** | Suppresses post-op / anxiety mimics |
-| **Autonomic Early Warning** | None (Hourly vitals) | **100 Hz ECG HRV / SampEn** | **12–24h prodromal warning** |
-| **Resuscitation Guidance** | Diagnostic only | **Safe Offline RL + SSC Bounds**| Fluid & vasopressor dosing |
+Source: [`models/precision_metrics.json`](models/precision_metrics.json), produced by [`src/train_precision_model.py`](src/train_precision_model.py).
+
+**Cohort**: 3,000 patients from PhysioNet 2019 Sets A + B · 115,974 hourly records · 226 sepsis patients (7.5%). The validation split has 22,551 hourly rows, of which 424 (1.9%) are positive.
+
+| Metric | Value | Notes |
+|:---|:---:|:---|
+| ROC-AUC | **0.803** | Hour-level discrimination |
+| PR-AUC | **0.092** | About 5× the 0.019 positive-rate baseline |
+| Brier score | **0.0176** | Well calibrated after isotonic regression |
+| Specificity @ t = 0.75 | **99.72%** | 61 false positives out of 22,127 negative hours |
+| Precision (PPV) @ t = 0.75 | **30.7%** | 27 TP / 88 alerts. The 75% precision target was **not** reached |
+| Recall (sensitivity) @ t = 0.75 | **6.4%** | 27 / 424 positive hours detected |
+| F1 @ t = 0.75 | 0.105 | |
+| PhysioNet 2019 normalised utility | **−0.73** | Below the "never alert" baseline of 0; the challenge winner scored about 0.36 on the hidden test set |
+
+**Confusion matrix (t = 0.75)**: TN 22,066 · FP 61 · FN 397 · TP 27
+
+**What this means**: the model ranks risk reasonably well (AUC 0.80) and produces calibrated probabilities, but the 0.75 operating point is far too conservative. It raises very few false alarms, yet misses about 94% of pre-sepsis hours, which is why the utility score is negative. Choosing the threshold to maximise utility, and evaluating at patient level, are the main next steps.
+
+> ⚠️ `demo_output/demo_results.json` reports AUC ≈ 0.9998. That run uses the **synthetic** cohort from `src/preprocess.py` and does not reflect real-world performance.
+
+---
+
+## 🧭 Limitations & Honest Assessment
+
+- **Single dataset, internal split only**: no external validation (e.g. train on Set A and test on Set B, or test on MIMIC-IV / eICU).
+- **Hour-level evaluation**: patient-level detection rate and median lead time have not been reported yet.
+- **Precision/recall trade-off unresolved**: the threshold was set for a precision target and was not tuned to the clinical utility function.
+- **Prototype modules are not in the trained pipeline**: conformal gating, signatures, NLP, waveforms, federated learning and RL are tested on synthetic inputs only (see status markers above).
+- **No subgroup / fairness analysis**, no prospective or silent-mode evaluation.
+- **Next steps**: utility-optimal thresholding; patient-level metrics; external validation on MIMIC-IV; adding signature features to the ensemble and measuring their contribution; conformal calibration on real held-out data; sequence models for irregular time series (e.g. GRU-D) as a comparison.
 
 ---
 
@@ -213,70 +244,20 @@ streamlit run app/streamlit_app.py
      * Safe RL "AI Clinician" resuscitation recommendation card with Surviving Sepsis Campaign safety guardrails.
 3. **📈 Analytics & Multi-Center Federated Network**:
    * Precision-Recall operating curves and confusion matrix.
-   * **Federated Hospital Network Card**: Live telemetry across US, EU, and Swiss ICU nodes (MIMIC-IV, AmsterdamUMCdb, eICU, HiRID), DP privacy budget accountant ($\epsilon = 0.82$, $\delta = 10^{-5}$), and global consensus AUC ($0.914$).
+   * **Federated Network Card (simulated)**: Illustrates the federated-learning prototype with simulated hospital nodes and a cumulative ε counter. The AUC figures shown there come from simulated data and are not clinical results.
 4. **🩺 About**: System documentation, clinical governance, and regulatory disclaimers.
 
 ---
 
 ## 🧪 Automated Verification & Test Harness
 
-SepsisSense v1.7 is guarded by a comprehensive, fully automated test harness comprising **42 tests across 5 test suites (100% Green Coverage)**:
+SepsisSense ships with **42 automated tests across 5 test files** (`test_app.py`, `test_demo.py`, `tests/test_conformal_and_signatures.py`, `tests/test_future_directions.py`, `tests/test_precision_pipeline.py`). All 42 pass (last run: 42 passed in 52 s, Python 3.11, Windows).
 
 ```bash
 pytest -v
 ```
 
-```
-============================= test session starts =============================
-platform win32 -- Python 3.11.9, pytest-9.2.0, pluggy-1.7.0
-rootdir: D:\Vscode\SepsisSense
-collected 42 items
-
-test_app.py::TestPreprocessing::test_sample_dataset_generation PASSED        [  2%]
-test_app.py::TestPreprocessing::test_preprocessor_pipeline PASSED            [  4%]
-test_app.py::TestPreprocessing::test_zero_variance_protection PASSED         [  7%]
-test_app.py::TestFeatureEngineering::test_clinical_features PASSED           [  9%]
-test_app.py::TestFeatureEngineering::test_rolling_features PASSED            [ 11%]
-test_app.py::TestFeatureEngineering::test_production_feature_generator PASSED [ 14%]
-test_app.py::TestProductionModelInference::test_model_loading_and_schema PASSED [ 16%]
-test_app.py::TestProductionModelInference::test_inference_probability_bounds PASSED [ 19%]
-test_app.py::TestProductionModelInference::test_explainer_integration PASSED [ 21%]
-test_demo.py::test_pytest_preprocessing PASSED                               [ 23%]
-test_demo.py::test_pytest_feature_engineering PASSED                         [ 26%]
-test_demo.py::test_pytest_model_training PASSED                              [ 28%]
-test_demo.py::test_pytest_model_explanation PASSED                           [ 30%]
-test_demo.py::test_pytest_end_to_end PASSED                                  [ 33%]
-tests/test_conformal_and_signatures.py::TestConformalPrediction::test_conformal_calibration_and_coverage PASSED [ 35%]
-tests/test_conformal_and_signatures.py::TestConformalPrediction::test_epistemic_uncertainty_quantification PASSED [ 38%]
-tests/test_path_signatures.py::TestPathSignatures::test_iterated_integral_and_levy_area PASSED [ 40%]
-tests/test_path_signatures.py::TestPathSignatures::test_vital_sign_signature_extractor PASSED [ 42%]
-tests/test_clinical_nlp.py::TestClinicalNLP::test_sepsis_symptom_extraction PASSED [ 45%]
-tests/test_clinical_nlp.py::TestClinicalNLP::test_mimic_detection_and_negation PASSED [ 47%]
-tests/test_clinical_nlp.py::TestClinicalNLP::test_palliative_goals_of_care_suppression PASSED [ 50%]
-tests/test_conformal_and_signatures.py::TestEnsembleIntegration::test_ensemble_conformal_and_signatures_api PASSED [ 52%]
-tests/test_future_directions.py::TestWaveformAnalytics::test_sample_entropy_computation PASSED [ 54%]
-tests/test_future_directions.py::TestWaveformAnalytics::test_hrv_feature_extraction PASSED [ 57%]
-tests/test_future_directions.py::TestWaveformAnalytics::test_arterial_line_waveform_extraction PASSED [ 59%]
-tests/test_future_directions.py::TestFederatedLearning::test_federated_client_gradient_clipping_and_dp PASSED [ 61%]
-tests/test_future_directions.py::TestFederatedLearning::test_federated_multi_node_aggregation PASSED [ 64%]
-tests/test_future_directions.py::TestSafeReinforcementLearning::test_state_vector_extraction PASSED [ 66%]
-tests/test_future_directions.py::TestSafeReinforcementLearning::test_guardrail_fluid_restriction_in_respiratory_failure PASSED [ 69%]
-tests/test_future_directions.py::TestSafeReinforcementLearning::test_guardrail_refractory_shock_vasopressor_mandate PASSED [ 71%]
-tests/test_future_directions.py::TestSafeReinforcementLearning::test_treatment_recommendation_pipeline PASSED [ 73%]
-tests/test_precision_pipeline.py::TestDataHarmonization::test_harmonize_schema_columns PASSED [ 76%]
-tests/test_precision_pipeline.py::TestDataHarmonization::test_fahrenheit_conversion PASSED [ 78%]
-tests/test_precision_pipeline.py::TestPhysioNetUtility::test_perfect_early_detection PASSED [ 80%]
-tests/test_precision_pipeline.py::TestPhysioNetUtility::test_missed_sepsis_penalty PASSED [ 83%]
-tests/test_precision_pipeline.py::TestPhysioNetUtility::test_non_septic_false_alarms PASSED [ 85%]
-tests/test_precision_pipeline.py::TestPrecisionEngineering::test_temporal_label_dilation PASSED [ 88%]
-tests/test_precision_pipeline.py::TestPrecisionEngineering::test_hard_negative_mining_preserves_sirs_and_sepsis PASSED [ 90%]
-tests/test_precision_pipeline.py::TestPrecisionEngineering::test_clinical_intent_features PASSED [ 92%]
-tests/test_precision_pipeline.py::TestPrecisionEngineering::test_persistence_filter_suppresses_noise_spike PASSED [ 95%]
-tests/test_precision_pipeline.py::TestPrecisionEngineering::test_persistence_filter_confirms_sustained_alert PASSED [ 97%]
-tests/test_precision_pipeline.py::TestPrecisionEnsemble::test_ensemble_fit_and_inference PASSED [100%]
-
-====================== 42 passed, 72 warnings in 59.81s =======================
-```
+The tests check that code runs correctly (schema, probability bounds, guardrail logic, conformal coverage on synthetic data, and so on). They are **not** evidence of clinical performance; see [Validated Results](#-validated-results-held-out-physionet-2019) for that.
 
 ---
 
