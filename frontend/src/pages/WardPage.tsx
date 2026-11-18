@@ -23,28 +23,27 @@ import {
   VitalValue,
 } from "../components/clinical";
 import { Badge, Card, EmptyState, Kbd, Segmented, Skeleton, Tooltip } from "../components/ui";
-import { useMeta, useWard } from "../lib/api";
+import { useMeta, useReplay, useWard } from "../lib/api";
 import { hasStaleVitals, icuDay, isRising, VITAL_META } from "../lib/format";
 import { usePrefs } from "../lib/prefs";
-import { ackFor, useAcks, type Ack } from "../lib/store";
 import type { PatientSummary } from "../lib/types";
 
 type Filter = "all" | "alerts" | "elevated" | "rising" | "stale";
 type Sort = "priority" | "bed" | "risk";
 type Unit = "all" | "MICU" | "SICU";
 
-function priority(p: PatientSummary, ack?: Ack): number {
-  if (p.alert && !ack) return 3;
+function priority(p: PatientSummary): number {
+  if (p.alert && !p.ack) return 3;
   if (p.alert) return 2;
   if (p.tier === "elevated") return 1;
   return 0;
 }
 
 export function WardPage() {
-  const { offset, research } = usePrefs();
-  const { data, isLoading, isError, error, isFetching } = useWard(offset);
+  const { research } = usePrefs();
+  const replay = useReplay();
+  const { data, isLoading, isError, error, isFetching } = useWard(replay.data?.offset);
   const meta = useMeta();
-  const [acks] = useAcks();
   const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>("all");
   const [unit, setUnit] = useState<Unit>("all");
@@ -57,12 +56,12 @@ export function WardPage() {
   const counts = useMemo(
     () => ({
       alerts: all.filter((p) => p.alert).length,
-      unacked: all.filter((p) => p.alert && !ackFor(acks, p.pid, p.alert_since_icu_hour)).length,
+      unacked: all.filter((p) => p.alert && !p.ack).length,
       elevated: all.filter((p) => p.tier === "elevated").length,
       rising: all.filter(isRising).length,
       stale: all.filter(hasStaleVitals).length,
     }),
-    [all, acks],
+    [all],
   );
 
   const rows = useMemo(() => {
@@ -79,12 +78,12 @@ export function WardPage() {
     r = [...r].sort((a, b) => {
       if (sort === "bed") return a.bed.localeCompare(b.bed);
       if (sort === "risk") return b.risk - a.risk;
-      const pa = priority(a, ackFor(acks, a.pid, a.alert_since_icu_hour));
-      const pb = priority(b, ackFor(acks, b.pid, b.alert_since_icu_hour));
+      const pa = priority(a);
+      const pb = priority(b);
       return pb - pa || b.risk - a.risk || a.bed.localeCompare(b.bed);
     });
     return r;
-  }, [all, filter, unit, sort, q, acks]);
+  }, [all, filter, unit, sort, q]);
 
   useEffect(() => setSel((s) => Math.min(s, Math.max(0, rows.length - 1))), [rows.length]);
 
@@ -254,8 +253,8 @@ export function WardPage() {
           </EmptyState>
         ) : (
           <>
-            <WardTable rows={rows} sel={sel} setSel={setSel} acks={acks} research={research} />
-            <WardCards rows={rows} acks={acks} research={research} />
+            <WardTable rows={rows} sel={sel} setSel={setSel} research={research} />
+            <WardCards rows={rows} research={research} />
           </>
         )}
       </Card>
@@ -344,13 +343,11 @@ function WardTable({
   rows,
   sel,
   setSel,
-  acks,
   research,
 }: {
   rows: PatientSummary[];
   sel: number;
   setSel: (i: number) => void;
-  acks: Record<string, Ack>;
   research: boolean;
 }) {
   const navigate = useNavigate();
@@ -380,7 +377,7 @@ function WardTable({
         </thead>
         <tbody>
           {rows.map((p, i) => {
-            const ack = ackFor(acks, p.pid, p.alert_since_icu_hour);
+            const ack = p.ack;
             return (
               <tr
                 key={p.pid}
@@ -442,7 +439,7 @@ function WardTable({
                   </td>
                 )}
                 <td className="px-3 py-2.5">
-                  <AlertStatus p={p} ack={ack} />
+                  <AlertStatus p={p} />
                   {p.record_ended && <div className="mt-0.5 text-[11px] text-faint">Record ended</div>}
                 </td>
                 <td className="pr-3 text-faint">
@@ -457,12 +454,12 @@ function WardTable({
   );
 }
 
-function WardCards({ rows, acks, research }: { rows: PatientSummary[]; acks: Record<string, Ack>; research: boolean }) {
+function WardCards({ rows, research }: { rows: PatientSummary[]; research: boolean }) {
   const navigate = useNavigate();
   return (
     <ul className="divide-y divide-line lg:hidden">
       {rows.map((p) => {
-        const ack = ackFor(acks, p.pid, p.alert_since_icu_hour);
+        const ack = p.ack;
         return (
           <li key={p.pid}>
             <button
@@ -484,7 +481,7 @@ function WardCards({ rows, acks, research }: { rows: PatientSummary[]; acks: Rec
                 </div>
                 <div className="flex flex-col items-end gap-1">
                   <RiskPill risk={p.risk} tier={p.tier} />
-                  <AlertStatus p={p} ack={ack} />
+                  <AlertStatus p={p} />
                 </div>
               </div>
               <div className="mt-2 flex items-center justify-between gap-3">

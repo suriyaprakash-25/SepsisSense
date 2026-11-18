@@ -80,3 +80,5 @@ node_modules
 api/.cache/
 frontend/dist/
 *.tsbuildinfo
+api/.data/
+!frontend/src/lib/

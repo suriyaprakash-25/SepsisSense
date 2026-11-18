@@ -17,10 +17,9 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { CriteriaCard, RiskSummaryCard } from "../components/riskCards";
 import { Badge, Button, Card, CardHeader, EmptyState, Kbd, Skeleton } from "../components/ui";
-import { useMeta, usePatient } from "../lib/api";
+import { useAck, useMeta, usePatient, useReplay } from "../lib/api";
 import { icuDay, sexLabel } from "../lib/format";
 import { usePrefs } from "../lib/prefs";
-import { ACK_REASONS, ackFor, useAcks } from "../lib/store";
 import type { Meta, PatientSummary } from "../lib/types";
 import { AckDialog } from "./patient/AckDialog";
 import { BundlePanel } from "./patient/BundlePanel";
@@ -37,11 +36,13 @@ const SELECTION_TEXT: Record<string, string> = {
 
 export function PatientPage() {
   const { pid } = useParams();
-  const { offset, research } = usePrefs();
+  const { research } = usePrefs();
+  const replay = useReplay();
+  const offset = replay.data?.offset;
   const [viewIndex, setViewIndex] = useState<number | null>(null);
   const { data, isLoading, isError, error, isFetching } = usePatient(pid, offset, viewIndex);
   const meta = useMeta();
-  const [acks, setAcks] = useAcks();
+  const { review, undo } = useAck(pid ?? "");
   const [ackOpen, setAckOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -56,7 +57,7 @@ export function PatientPage() {
     while (j > 0 && data.series[j - 1].alert) j--;
     return data.series[j].icu_hour;
   })();
-  const ack = s ? ackFor(acks, s.pid, nowAlertSince) : undefined;
+  const ack = data?.now_ack ?? undefined;
 
   const openAck = useCallback(() => {
     if (nowAlertSince !== null && !ack) setAckOpen(true);
@@ -135,18 +136,13 @@ export function PatientPage() {
                 <CircleCheck className="size-4 text-ok" />
                 <div className="text-[13px] leading-tight">
                   <div className="font-medium text-ink">Reviewed</div>
-                  <div className="max-w-56 truncate text-xs text-muted">
-                    {ACK_REASONS.find((r) => r.id === ack.reason)?.label}
+                  <div className="max-w-64 truncate text-xs text-muted" title={ack.note || undefined}>
+                    {ack.by} · {ack.reason_label}
                   </div>
                 </div>
                 <button
-                  onClick={() =>
-                    setAcks((prev) => {
-                      const next = { ...prev };
-                      delete next[s.pid];
-                      return next;
-                    })
-                  }
+                  onClick={() => undo.mutate()}
+                  disabled={undo.isPending}
                   className="ml-1 text-faint hover:text-ink"
                   aria-label="Undo review"
                   title="Undo review"
@@ -279,13 +275,11 @@ export function PatientPage() {
         onClose={() => setAckOpen(false)}
         bed={s.bed}
         since={nowAlertSince}
+        pending={review.isPending}
+        error={review.error ? String((review.error as Error).message) : null}
         onConfirm={(reason, note) => {
           if (nowAlertSince === null) return;
-          setAcks((prev) => ({
-            ...prev,
-            [s.pid]: { reason, note, at: new Date().toISOString(), alertSince: nowAlertSince },
-          }));
-          setAckOpen(false);
+          review.mutate({ reason, note }, { onSuccess: () => setAckOpen(false) });
         }}
       />
     </div>

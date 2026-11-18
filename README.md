@@ -339,6 +339,21 @@ What clinicians get:
 - **Model facts**: intended use, performance on the unseen pool vs. internal validation, and known limitations.
 - Night mode, an hour-by-hour replay clock, and an optional research view showing retrospective Sepsis-3 labels.
 
+**Sign-in and roles**
+
+| Role | Sees | Can do |
+|:---|:---|:---|
+| **Clinician (admin)** | Every patient on the ward, alerts, assessments, Model facts | Review alerts (shared with the care team), run assessments, move the replay clock, create patient and clinician accounts, reset passwords, delete accounts |
+| **Patient** | Only their own record: current vital signs, blood results with plain-language explanations, sepsis risk as "N in 100", 6-hour outlook, risk history, and whether their care team reviewed an alert | Read only |
+
+Demo accounts are created on first start (shown on the sign-in page): `doctor` / `doctor-demo`, and patients `patient` / `patient-demo` (MICU-15) and `patient2` / `patient-demo` (MICU-09). They are for this local research demo only; reset or delete them in **Access management** before showing the app to anyone else.
+
+How access is enforced (server side, standard library only):
+- Passwords hashed with salted PBKDF2-SHA256; sessions are HMAC-signed, 12-hour tokens in an HttpOnly, SameSite=Lax cookie. Resetting a password signs that user out everywhere.
+- Every API route checks the role. A patient requesting the ward, another patient, assessments, admin or the replay clock gets 403. Patients never receive retrospective labels or the clinician's review reason and note.
+- State-changing requests require an `X-SepsisSense` header (CSRF protection), and 5 failed sign-ins lock an account for 60 s.
+- Accounts, alert reviews and the replay clock are stored in `api/.data/` (git-ignored). Set `SEPSISSENSE_SECRET` to supply your own signing key; otherwise one is generated there.
+
 Design notes: low risk is shown in neutral grey, never green, because the model misses most septic patients; red and amber are reserved for alerts and abnormal values. The API applies the alert threshold on the scale it was tuned on (uncalibrated score), uses a causal persistence filter, and reports pool metrics live; see the Model facts page.
 
 ### 5. Legacy Streamlit app

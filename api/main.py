@@ -17,18 +17,21 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 API_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(API_DIR))
 
 import assess  # noqa: E402
+import auth  # noqa: E402
 import clinical  # noqa: E402
 import engine  # noqa: E402
+import state  # noqa: E402
+from auth import current_user, require_clinician  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("sepsissense.api")
@@ -41,9 +44,19 @@ app = FastAPI(title="SepsisSense API", version="2.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["*"],
+    allow_credentials=True,
 )
+
+
+@app.middleware("http")
+async def csrf_guard(request: Request, call_next):
+    """State-changing API calls must carry a custom header that cross-site forms cannot set."""
+    if request.url.path.startswith("/api/") and request.method not in ("GET", "HEAD", "OPTIONS"):
+        if request.headers.get("x-sepsissense") != "1":
+            return JSONResponse({"detail": "Missing X-SepsisSense header"}, status_code=403)
+    return await call_next(request)
 
 COHORT: Optional[engine.Cohort] = None
 ASSESSOR: Optional[assess.Assessor] = None
@@ -55,6 +68,7 @@ def _startup() -> None:
     log.info("Loading cohort (first run builds the cache, ~1 min)...")
     COHORT = engine.load_cohort()
     log.info("Cohort ready: %d patients", len(COHORT.patients))
+    auth.init_users(list(COHORT.patients))
     ASSESSOR = assess.Assessor.load()
     log.info("Assessment model ready")
 
@@ -167,6 +181,7 @@ def _summary(rec: engine.PatientRecord, h: int, now: int) -> Dict[str, Any]:
         "alert": alert,
         "alert_since_icu_hour": _icu_hour(rec, since) if since is not None else None,
         "alert_hours": (h - since + 1) if since is not None else 0,
+        "ack": state.get_ack(rec.pid, _icu_hour(rec, since)) if since is not None else None,
         "tier": _tier(risk, alert),
         "agreement": _agreement(rec, h),
         "vitals": vitals,
@@ -213,7 +228,7 @@ def health() -> Dict[str, Any]:
 
 
 @app.get("/api/meta")
-def meta() -> Dict[str, Any]:
+def meta(user: Dict[str, Any] = Depends(current_user)) -> Dict[str, Any]:
     c = _cohort()
     internal = {}
     if engine.METRICS_PATH.exists():
@@ -235,8 +250,9 @@ def meta() -> Dict[str, Any]:
 
 
 @app.get("/api/ward")
-def ward(offset: int = Query(0, ge=0, le=MAX_OFFSET)) -> Dict[str, Any]:
+def ward(user: Dict[str, Any] = Depends(require_clinician)) -> Dict[str, Any]:
     c = _cohort()
+    offset = state.get_offset()
     rows = []
     for rec in c.patients.values():
         now = _now_hour(rec, offset)
@@ -247,13 +263,16 @@ def ward(offset: int = Query(0, ge=0, le=MAX_OFFSET)) -> Dict[str, Any]:
 @app.get("/api/patients/{pid}")
 def patient(
     pid: str,
-    offset: int = Query(0, ge=0, le=MAX_OFFSET),
     hour: Optional[int] = Query(None, ge=0, description="View the chart as of this hour index (≤ now)"),
+    user: Dict[str, Any] = Depends(current_user),
 ) -> Dict[str, Any]:
     c = _cohort()
+    if user["role"] == "patient" and user.get("pid") != pid:
+        raise HTTPException(403, "Patients can only view their own record")
     rec = c.patients.get(pid)
     if rec is None:
         raise HTTPException(404, f"Unknown patient {pid}")
+    offset = state.get_offset()
     now = _now_hour(rec, offset)
     h = now if hour is None else int(min(hour, now))
 
@@ -274,9 +293,25 @@ def patient(
     labs = _labs_table(rec, h)
 
     summary = _summary(rec, h, now)
+    if user["role"] == "patient":
+        # Retrospective labels and cohort-selection details are for research use only.
+        summary["research"] = {"sepsis_label_icu_hour": None, "sepsis_onset_icu_hour": None, "septic_stay": False}
+        summary["selection_reason"] = None
     latest_all = {n: _latest(rec, n, h) for n in ("Lactate", "MAP", "SBP")}
+    since_now = _alert_since(rec, now)
+    now_ack = state.get_ack(rec.pid, _icu_hour(rec, since_now)) if since_now is not None else None
+    if user["role"] == "patient":
+        # Patients see that their care team reviewed the alert, not the clinical reason or note.
+        def _patient_view(a: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+            return None if a is None else {
+                "alert_since_icu_hour": a["alert_since_icu_hour"], "by": a["by"], "at": a["at"],
+                "reason": None, "reason_label": None, "note": "", "by_username": None,
+            }
+        summary["ack"] = _patient_view(summary.get("ack"))
+        now_ack = _patient_view(now_ack)
     return {
         "summary": summary,
+        "now_ack": now_ack,
         "series": series,
         "drivers": engine.grouped_drivers(rec, h, c.feature_names),
         "labs": labs,
@@ -302,7 +337,7 @@ class AssessRequest(BaseModel):
 
 
 @app.get("/api/assess/fields")
-def assess_fields() -> Dict[str, Any]:
+def assess_fields(user: Dict[str, Any] = Depends(require_clinician)) -> Dict[str, Any]:
     out = []
     for name, (lo, hi) in assess.INPUT_FIELDS.items():
         m = clinical.MEASUREMENTS[name]
@@ -323,7 +358,7 @@ def assess_fields() -> Dict[str, Any]:
 
 
 @app.post("/api/assess")
-def assess_patient(req: AssessRequest) -> Dict[str, Any]:
+def assess_patient(req: AssessRequest, user: Dict[str, Any] = Depends(require_clinician)) -> Dict[str, Any]:
     c = _cohort()
     if ASSESSOR is None:
         raise HTTPException(503, "Assessment model still loading")
@@ -406,6 +441,149 @@ def assess_patient(req: AssessRequest) -> Dict[str, Any]:
         "measurements": {k: {kk: v[kk] for kk in ("label", "unit", "low", "high", "dp")} for k, v in clinical.MEASUREMENTS.items()},
         "warnings": warnings,
     }
+
+
+# ------------------------------------------------------------------ auth
+
+class LoginRequest(BaseModel):
+    username: str = Field(..., min_length=1, max_length=64)
+    password: str = Field(..., min_length=1, max_length=256)
+
+
+def _me(user: Dict[str, Any]) -> Dict[str, Any]:
+    out = auth.public(user)
+    if user["role"] == "patient" and user.get("pid") and COHORT is not None:
+        rec = COHORT.patients.get(user["pid"])
+        out["bed"] = rec.bed if rec else None
+    return out
+
+
+@app.post("/api/auth/login")
+def login(req: LoginRequest, request: Request, response: Response) -> Dict[str, Any]:
+    user = auth.authenticate(req.username, req.password)
+    response.set_cookie(
+        auth.COOKIE_NAME,
+        auth.issue_token(user),
+        max_age=auth.TOKEN_TTL_SECONDS,
+        httponly=True,
+        samesite="lax",
+        secure=request.url.scheme == "https",
+        path="/",
+    )
+    return {"user": _me(user)}
+
+
+@app.post("/api/auth/logout")
+def logout(response: Response) -> Dict[str, Any]:
+    response.delete_cookie(auth.COOKIE_NAME, path="/")
+    return {"ok": True}
+
+
+@app.get("/api/auth/me")
+def me(user: Dict[str, Any] = Depends(current_user)) -> Dict[str, Any]:
+    return {"user": _me(user)}
+
+
+@app.get("/api/auth/demo-accounts")
+def demo_accounts() -> Dict[str, Any]:
+    """Demo credentials shown on the sign-in page (local research demo only)."""
+    existing = {u["username"] for u in auth.list_users()}
+    return {
+        "accounts": [
+            {"username": a["username"], "password": a["password"], "role": a["role"], "display_name": a["display_name"]}
+            for a in auth.DEMO_ACCOUNTS
+            if a["username"] in existing and auth.verify_password(a["password"], auth.get_user(a["username"])["password_hash"])
+        ]
+    }
+
+
+# ---------------------------------------------------------------- replay
+
+class ReplayRequest(BaseModel):
+    offset: int = Field(..., ge=0, le=MAX_OFFSET)
+
+
+@app.get("/api/replay")
+def get_replay(user: Dict[str, Any] = Depends(current_user)) -> Dict[str, Any]:
+    return {"offset": state.get_offset(), "max_offset": MAX_OFFSET}
+
+
+@app.post("/api/replay")
+def set_replay(req: ReplayRequest, user: Dict[str, Any] = Depends(require_clinician)) -> Dict[str, Any]:
+    return {"offset": state.set_offset(req.offset), "max_offset": MAX_OFFSET}
+
+
+# ---------------------------------------------------------- alert reviews
+
+class AckRequest(BaseModel):
+    reason: str = Field(..., pattern="^(workup|alternative|known|comfort)$")
+    note: str = Field("", max_length=280)
+
+
+@app.post("/api/patients/{pid}/ack")
+def ack_alert(pid: str, req: AckRequest, user: Dict[str, Any] = Depends(require_clinician)) -> Dict[str, Any]:
+    rec = _cohort().patients.get(pid)
+    if rec is None:
+        raise HTTPException(404, f"Unknown patient {pid}")
+    now = _now_hour(rec, state.get_offset())
+    since = _alert_since(rec, now)
+    if since is None:
+        raise HTTPException(409, "This patient has no active alert to review.")
+    return {"ack": state.set_ack(pid, _icu_hour(rec, since), req.reason, req.note.strip(), user)}
+
+
+@app.delete("/api/patients/{pid}/ack")
+def clear_ack(pid: str, user: Dict[str, Any] = Depends(require_clinician)) -> Dict[str, Any]:
+    state.clear_ack(pid)
+    return {"ok": True}
+
+
+# ------------------------------------------------------- account admin
+
+class CreateUserRequest(BaseModel):
+    username: str = Field(..., pattern=r"^[a-z0-9][a-z0-9._-]{2,31}$")
+    display_name: str = Field(..., min_length=1, max_length=80)
+    role: str = Field(..., pattern="^(clinician|patient)$")
+    pid: Optional[str] = None
+
+
+@app.get("/api/admin/users")
+def admin_users(user: Dict[str, Any] = Depends(require_clinician)) -> Dict[str, Any]:
+    c = _cohort()
+    beds = {pid: rec.bed for pid, rec in c.patients.items()}
+    users = sorted(auth.list_users(), key=lambda u: (u["role"] != "clinician", u["username"]))
+    for u in users:
+        u["bed"] = beds.get(u.get("pid")) if u.get("pid") else None
+    return {
+        "users": users,
+        "patients": [{"pid": pid, "bed": rec.bed} for pid, rec in c.patients.items()],
+        "me": user["username"],
+    }
+
+
+@app.post("/api/admin/users")
+def admin_create_user(req: CreateUserRequest, user: Dict[str, Any] = Depends(require_clinician)) -> Dict[str, Any]:
+    if req.role == "patient":
+        if not req.pid or req.pid not in _cohort().patients:
+            raise HTTPException(422, "Choose the patient this account belongs to.")
+    password = auth.generate_password()
+    created = auth.create_user(req.username, req.display_name.strip(), req.role, req.pid if req.role == "patient" else None, password)
+    return {"user": created, "temporary_password": password}
+
+
+@app.post("/api/admin/users/{username}/reset-password")
+def admin_reset_password(username: str, user: Dict[str, Any] = Depends(require_clinician)) -> Dict[str, Any]:
+    password = auth.generate_password()
+    auth.set_password(username, password)
+    return {"username": username, "temporary_password": password}
+
+
+@app.delete("/api/admin/users/{username}")
+def admin_delete_user(username: str, user: Dict[str, Any] = Depends(require_clinician)) -> Dict[str, Any]:
+    if username == user["username"]:
+        raise HTTPException(409, "You cannot delete your own account while signed in.")
+    auth.delete_user(username)
+    return {"ok": True}
 
 
 # ------------------------------------------------------------- static UI

@@ -9,12 +9,16 @@ export function AckDialog({
   onConfirm,
   bed,
   since,
+  pending = false,
+  error = null,
 }: {
   open: boolean;
   onClose: () => void;
   onConfirm: (reason: AckReason, note: string) => void;
   bed: string;
   since: number | null;
+  pending?: boolean;
+  error?: string | null;
 }) {
   const [reason, setReason] = useState<AckReason | null>(null);
   const [note, setNote] = useState("");
@@ -31,14 +35,14 @@ export function AckDialog({
       open={open}
       onClose={onClose}
       title={`Review alert — ${bed}`}
-      description={`Alert active since ICU hour ${since ?? "—"}. Recording why you reviewed it keeps the ward list honest and helps audit alarm burden.`}
+      description={`Alert active since ICU hour ${since ?? "—"}. Your review is shared with the care team and shown to the patient as "reviewed by your care team" (reason and note stay with clinicians).`}
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" disabled={!reason} onClick={() => reason && onConfirm(reason, note.trim())}>
-            Mark as reviewed
+          <Button variant="primary" disabled={!reason || pending} onClick={() => reason && onConfirm(reason, note.trim())}>
+            {pending ? "Saving…" : "Mark as reviewed"}
           </Button>
         </>
       }
@@ -83,6 +87,7 @@ export function AckDialog({
           className="mt-1.5 w-full resize-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-faint focus:border-brand focus:outline-none"
         />
       </label>
+      {error && <p className="mt-3 text-sm text-alert-ink">{error}</p>}
     </Dialog>
   );
 }

@@ -8,6 +8,7 @@ import {
   FlaskConical,
   Keyboard,
   LayoutGrid,
+  LogOut,
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
@@ -15,10 +16,11 @@ import {
   Settings2,
   ShieldAlert,
   Sun,
+  Users,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { useMeta } from "../lib/api";
+import { useLogout, useReplay, useSession, useSetReplay } from "../lib/api";
 import { usePrefs } from "../lib/prefs";
 import { Dialog, IconButton, Kbd, Popover, Switch, Tooltip } from "./ui";
 
@@ -26,12 +28,20 @@ const NAV = [
   { to: "/", label: "Ward overview", icon: LayoutGrid, end: true },
   { to: "/assess", label: "New assessment", icon: ClipboardPlus, end: false },
   { to: "/model", label: "Model facts", icon: BookOpenCheck, end: false },
+  { to: "/access", label: "Access management", icon: Users, end: false },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { sidebarCollapsed, setSidebarCollapsed, theme, setTheme, offset, setOffset } = usePrefs();
-  const meta = useMeta();
-  const maxOffset = meta.data?.max_offset ?? 24;
+  const { sidebarCollapsed, setSidebarCollapsed, theme, setTheme } = usePrefs();
+  const replay = useReplay();
+  const setReplay = useSetReplay();
+  const offset = replay.data?.offset ?? 0;
+  const maxOffset = replay.data?.max_offset ?? 24;
+  // The replay clock is shared server-side: every clinician and patient sees the same "now".
+  const setOffset = (v: number | ((p: number) => number)) => {
+    const next = Math.max(0, Math.min(maxOffset, typeof v === "function" ? v(offset) : v));
+    if (next !== offset) setReplay.mutate(next);
+  };
   const [helpOpen, setHelpOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -49,7 +59,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [maxOffset, setOffset, setTheme, theme, navigate]);
+  }, [maxOffset, offset, setTheme, theme, navigate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex h-full">
@@ -162,6 +172,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               {theme === "dark" ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}
             </IconButton>
             <SettingsMenu />
+            <UserMenu />
           </div>
         </header>
         <main className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">{children}</main>
@@ -185,7 +196,7 @@ function ReplayClock({
     <div className="flex items-center gap-1 rounded-lg border border-line bg-subtle p-0.5">
       <Tooltip
         side="bottom"
-        content="Recorded stays are replayed hour by hour. Step forward to watch risk evolve as new data arrives. Shortcuts: [ and ]"
+        content="Recorded stays are replayed hour by hour. Stepping forward moves time for everyone signed in, including patients. Shortcuts: [ and ]"
       >
         <span className="hidden items-center gap-1.5 pr-1 pl-2 text-xs font-medium text-muted sm:inline-flex">
           <FlaskConical className="size-3.5" />
@@ -279,5 +290,52 @@ function ShortcutsDialog({ open, onClose }: { open: boolean; onClose: () => void
         ))}
       </ul>
     </Dialog>
+  );
+}
+
+function UserMenu() {
+  const { data: user } = useSession();
+  const logout = useLogout();
+  if (!user) return null;
+  const initials = user.display_name
+    .replace(/^Dr\.?\s*/i, "")
+    .split(/\s+/)
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+  return (
+    <Popover
+      trigger={({ open, toggle }) => (
+        <button
+          onClick={toggle}
+          aria-label="Account"
+          className={clsx(
+            "ml-1 flex size-9 items-center justify-center rounded-full text-[13px] font-semibold transition-colors",
+            open ? "bg-brand text-white" : "bg-brand-soft text-brand-ink hover:bg-brand hover:text-white",
+          )}
+        >
+          {initials || "?"}
+        </button>
+      )}
+    >
+      <div className="flex items-center gap-3">
+        <span className="flex size-10 items-center justify-center rounded-full bg-brand-soft text-sm font-semibold text-brand-ink">
+          {initials}
+        </span>
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold text-ink">{user.display_name}</div>
+          <div className="text-xs text-muted">
+            Clinician · admin · <span className="font-mono">{user.username}</span>
+          </div>
+        </div>
+      </div>
+      <button
+        onClick={() => logout.mutate()}
+        className="mt-4 flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-line text-sm font-medium text-ink hover:bg-hover"
+      >
+        <LogOut className="size-4" /> Sign out
+      </button>
+    </Popover>
   );
 }

@@ -11,8 +11,6 @@ import {
 } from "lucide-react";
 import { ago, num, pct, TIER_LABEL } from "../lib/format";
 import type { Measurement, PatientSummary, Tier } from "../lib/types";
-import type { Ack } from "../lib/store";
-import { ACK_REASONS } from "../lib/store";
 import { Badge, Tooltip } from "./ui";
 
 /** Calibrated risk never exceeds ~0.39, so all risk visuals share a 0–40 % scale. */
@@ -174,17 +172,17 @@ export function VitalValue({
 
 // ------------------------------------------------------------ Status cell
 
-export function AlertStatus({ p, ack }: { p: PatientSummary; ack?: Ack }) {
+export function AlertStatus({ p }: { p: PatientSummary }) {
+  const ack = p.ack;
   if (!p.alert) {
     if (p.tier === "elevated") return <span className="text-xs text-warn-ink">Watch</span>;
     return <span className="text-xs text-faint">—</span>;
   }
   if (ack) {
-    const reason = ACK_REASONS.find((r) => r.id === ack.reason);
     return (
-      <Tooltip content={`Acknowledged: ${reason?.label ?? ack.reason}${ack.note ? ` — “${ack.note}”` : ""}`}>
+      <Tooltip content={`Reviewed by ${ack.by}: ${ack.reason_label}${ack.note ? ` — “${ack.note}”` : ""}`}>
         <Badge tone="neutral" icon={<CircleCheck className="size-3" />}>
-          Acknowledged
+          Reviewed
         </Badge>
       </Tooltip>
     );

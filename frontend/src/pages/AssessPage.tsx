@@ -18,7 +18,7 @@ import { Area, AreaChart, ReferenceLine, ResponsiveContainer, Tooltip as RToolti
 import { RISK_SCALE_MAX } from "../components/clinical";
 import { CriteriaCard, RiskSummaryCard } from "../components/riskCards";
 import { Button, Card, CardHeader, EmptyState, Kbd, Segmented, Skeleton } from "../components/ui";
-import { AssessError, useAssess, useAssessFields, useMeta } from "../lib/api";
+import { HttpError, useAssess, useAssessFields, useMeta } from "../lib/api";
 import { pct } from "../lib/format";
 import { usePersisted } from "../lib/store";
 import type { AssessField, AssessRequest, AssessResponse } from "../lib/types";
@@ -463,7 +463,7 @@ export function AssessPage() {
                   <div>
                     <div className="text-sm font-semibold text-ink">Could not assess</div>
                     <ul className="mt-1 space-y-0.5 text-[13px] text-muted">
-                      {(mutation.error instanceof AssessError ? mutation.error.errors : [String(mutation.error)]).map((e) => (
+                      {(mutation.error instanceof HttpError ? mutation.error.errors : [String(mutation.error)]).map((e) => (
                         <li key={e}>{e}</li>
                       ))}
                     </ul>
