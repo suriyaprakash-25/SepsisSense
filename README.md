@@ -285,7 +285,28 @@ pip install -r requirements.txt
 pytest -v
 ```
 
-### 4. Launch the Streamlit Clinical Application
+### 4. Launch the clinician web app (recommended)
+
+A React + TypeScript interface designed for ICU clinicians, backed by a FastAPI service that scores **real, de-identified PhysioNet 2019 stays the model never saw in training** (files p010000 and later). Requires Node.js 18+ and the PhysioNet training set A under `physionet.org/` (see [DATA_DOWNLOAD.md](DATA_DOWNLOAD.md)).
+
+```bash
+# one-time: build the UI
+cd frontend && npm install && npm run build && cd ..
+
+# serve API + UI (first start scores a 1,500-stay pool and caches it, ~1 min)
+uvicorn api.main:app --port 8000
+```
+Open [http://localhost:8000](http://localhost:8000). For UI development with hot reload, run `npm run dev` in `frontend/` (port 5173, proxies `/api` to port 8000).
+
+What clinicians get:
+- **Ward overview**: patients sorted by who needs attention first, risk with 12 h trend, vitals with H/L flags and stale-data markers, lactate recency, filter tiles (alerts, elevated, rising, vitals overdue), keyboard navigation.
+- **Patient view**: risk timeline you can scrub back through, vitals small-multiples with reference bands, labs with recency and trends, the "what is driving this score" panel (grouped TreeSHAP), Surviving Sepsis Campaign Hour-1 checklist, SIRS/qSOFA, and an alert review workflow with reasons.
+- **Model facts**: intended use, performance on the unseen pool vs. internal validation, and known limitations.
+- Night mode, an hour-by-hour replay clock, and an optional research view showing retrospective Sepsis-3 labels.
+
+Design notes: low risk is shown in neutral grey, never green, because the model misses most septic patients; red and amber are reserved for alerts and abnormal values. The API applies the alert threshold on the scale it was tuned on (uncalibrated score), uses a causal persistence filter, and reports pool metrics live; see the Model facts page.
+
+### 5. Legacy Streamlit app
 ```bash
 streamlit run app/streamlit_app.py
 ```

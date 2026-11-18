@@ -75,3 +75,8 @@ node_modules
 .env
 .env.*
 !.env.example
+
+# Clinician web app
+api/.cache/
+frontend/dist/
+*.tsbuildinfo

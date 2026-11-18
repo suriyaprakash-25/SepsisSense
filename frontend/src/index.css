@@ -1,0 +1,165 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+  Colour rules
+  - Red and amber carry clinical meaning only: model alert / elevated / abnormal value.
+  - Low risk is neutral grey, never green. With ~2-6% recall a low score does
+    not rule sepsis out, so the UI must not signal "all clear".
+  - Brand blue is used for navigation and primary actions, never for risk.
+*/
+:root {
+  --canvas: #f5f6f8;
+  --surface: #ffffff;
+  --subtle: #f0f2f5;
+  --hover: #eef1f5;
+  --line: #e2e6ec;
+  --line-strong: #cdd3dc;
+  --ink: #111827;
+  --muted: #4b5565;
+  --faint: #7a8494;
+
+  --brand: #1e4fd8;
+  --brand-hover: #1a43b8;
+  --brand-soft: #e8efff;
+  --brand-ink: #1a3fae;
+
+  --alert: #c8281d;
+  --alert-soft: #fdecea;
+  --alert-ink: #a3170e;
+  --alert-line: #f4b9b3;
+
+  --warn: #b85c00;
+  --warn-soft: #fff3e0;
+  --warn-ink: #8f4700;
+  --warn-line: #f6cf9b;
+
+  --ok: #127a52;
+  --ok-soft: #e6f5ee;
+
+  --chart-grid: #e8ebf0;
+  --chart-band: #eef6f1;
+  --shadow: 0 1px 2px rgb(16 24 40 / 0.05), 0 1px 3px rgb(16 24 40 / 0.06);
+  --shadow-lg: 0 12px 32px -8px rgb(16 24 40 / 0.18), 0 4px 8px -4px rgb(16 24 40 / 0.08);
+  color-scheme: light;
+}
+
+.dark {
+  --canvas: #0b0f15;
+  --surface: #121821;
+  --subtle: #18202b;
+  --hover: #1c2531;
+  --line: #242e3b;
+  --line-strong: #344152;
+  --ink: #e8edf4;
+  --muted: #a3aebd;
+  --faint: #758194;
+
+  --brand: #5b8cff;
+  --brand-hover: #7aa2ff;
+  --brand-soft: #172446;
+  --brand-ink: #a9c2ff;
+
+  --alert: #ff6b5e;
+  --alert-soft: #3a1512;
+  --alert-ink: #ffb3ab;
+  --alert-line: #6e2620;
+
+  --warn: #f5a524;
+  --warn-soft: #33230b;
+  --warn-ink: #ffd18a;
+  --warn-line: #66450f;
+
+  --ok: #3ccf91;
+  --ok-soft: #0f2b20;
+
+  --chart-grid: #1f2833;
+  --chart-band: #132620;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 16px 40px -8px rgb(0 0 0 / 0.6);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-subtle: var(--subtle);
+  --color-hover: var(--hover);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-ink: var(--brand-ink);
+  --color-alert: var(--alert);
+  --color-alert-soft: var(--alert-soft);
+  --color-alert-ink: var(--alert-ink);
+  --color-alert-line: var(--alert-line);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-warn-ink: var(--warn-ink);
+  --color-warn-line: var(--warn-line);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --shadow-card: var(--shadow);
+  --shadow-pop: var(--shadow-lg);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  ::selection {
+    background: var(--brand-soft);
+  }
+}
+
+@layer utilities {
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--alert) 45%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+.pulse-alert {
+  animation: pulse-ring 2s ease-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pulse-alert {
+    animation: none;
+  }
+}
