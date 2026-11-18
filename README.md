@@ -206,6 +206,7 @@ Source: [`models/precision_metrics.json`](models/precision_metrics.json), produc
 - **Single dataset**: the unseen-pool check uses more stays from the same PhysioNet hospital system, which is not true external validation (e.g. test on MIMIC-IV / eICU).
 - **Training-pipeline issues** found while building the web app: the alert threshold is tuned on the uncalibrated score but applied to the calibrated one; the persistence filter looks one hour into the future; the "lab-ordering" features are computed after forward-fill, so they only encode whether a lab was ever charted; the saved conformal quantile (0.25) yields empty prediction sets for most scores.
 - **Limited patient-level evaluation**: the unseen pool reports septic stays alerted (9 / 138), but median lead time has not been measured yet.
+- **Shortcut learning on length of stay**: identical vitals score about 5% at ICU hour 30 and about 28% at hour 120, because longer PhysioNet stays carry more sepsis labels. A fair model should be retrained without `ICULOS`/`HospAdmTime`, or with them controlled for, and the effect re-measured.
 - **Precision/recall trade-off unresolved**: the threshold was set for a precision target and was not tuned to the clinical utility function.
 - **Prototype modules are not in the trained pipeline**: conformal gating, signatures, NLP, waveforms, federated learning and RL are tested on synthetic inputs only (see status markers above).
 - **No subgroup / fairness analysis**, no prospective or silent-mode evaluation.
@@ -334,6 +335,7 @@ Open [http://localhost:8000](http://localhost:8000). For UI development with hot
 What clinicians get:
 - **Ward overview**: patients sorted by who needs attention first, risk with 12 h trend, vitals with H/L flags and stale-data markers, lactate recency, filter tiles (alerts, elevated, rising, vitals overdue), keyboard navigation.
 - **Patient view**: risk timeline you can scrub back through, vitals small-multiples with reference bands, labs with recency and trends, the "what is driving this score" panel (grouped TreeSHAP), Surviving Sepsis Campaign Hour-1 checklist, SIRS/qSOFA, and an alert review workflow with reasons.
+- **New assessment**: enter vitals and labs for your own patient in a flowsheet (oldest reading on the left, now on the right) and get the same risk card, drivers, SIRS/qSOFA and Hour-1 checklist. Add up to 6 time points within the last 24 h so the model sees real trends; values are range-checked as you type, and the result warns when inputs are thin (one time point, no lactate) or when time in ICU dominates the score. Readings are placed on an hourly grid and run through the training feature pipeline, with missing values filled from training-era medians.
 - **Model facts**: intended use, performance on the unseen pool vs. internal validation, and known limitations.
 - Night mode, an hour-by-hour replay clock, and an optional research view showing retrospective Sepsis-3 labels.
 

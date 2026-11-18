@@ -5,6 +5,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import "./index.css";
 import { PrefsProvider } from "./lib/prefs";
+import { AssessPage } from "./pages/AssessPage";
 import { ModelFactsPage } from "./pages/ModelFactsPage";
 import { PatientPage } from "./pages/PatientPage";
 import { WardPage } from "./pages/WardPage";
@@ -22,6 +23,7 @@ createRoot(document.getElementById("root")!).render(
             <Routes>
               <Route path="/" element={<WardPage />} />
               <Route path="/patients/:pid" element={<PatientPage />} />
+              <Route path="/assess" element={<AssessPage />} />
               <Route path="/model" element={<ModelFactsPage />} />
               <Route path="*" element={<WardPage />} />
             </Routes>

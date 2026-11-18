@@ -170,6 +170,7 @@ export function ModelFactsPage() {
             "\"Lab-ordering\" features are computed after forward-fill, so they encode whether a lab has ever been charted, not when it was ordered.",
             "Conformal prediction is not shown: the saved quantile (0.25) produces empty prediction sets for most scores.",
             "No mental-status (GCS), medication, culture or note data. Bundle prompts cannot see orders.",
+            "The score depends strongly on time in ICU: identical vitals score about 5% at ICU hour 30 but about 28% at hour 120. Longer PhysioNet stays carry more sepsis labels, and the model learned that shortcut.",
           ].map((t) => (
             <Item key={t} icon={<CircleAlert className="size-4 text-warn" />}>
               {t}

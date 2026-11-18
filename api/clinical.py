@@ -194,7 +194,8 @@ def bundle_prompts(latest: Dict[str, Dict[str, Any]], risk: float, threshold: fl
     elif lac_age is not None and lac_age > 6:
         lac_ctx, lac_pri = f"Last lactate {lac_v:.1f} mmol/L, {int(lac_age)} h ago.", "high" if lac_v >= 2 else "medium"
     else:
-        lac_ctx = f"Lactate {lac_v:.1f} mmol/L, {int(lac_age or 0)} h ago."
+        when = "this hour" if not lac_age else f"{int(lac_age)} h ago"
+        lac_ctx = f"Lactate {lac_v:.1f} mmol/L, {when}."
         lac_pri = "high" if lac_v >= 2 else "low"
     if lac_v is not None and lac_v >= 2:
         lac_ctx += " Elevated: remeasure within 2–4 h."

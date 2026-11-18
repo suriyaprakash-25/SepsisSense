@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
+from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -25,6 +26,7 @@ from fastapi.staticfiles import StaticFiles
 API_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(API_DIR))
 
+import assess  # noqa: E402
 import clinical  # noqa: E402
 import engine  # noqa: E402
 
@@ -39,19 +41,22 @@ app = FastAPI(title="SepsisSense API", version="2.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
 COHORT: Optional[engine.Cohort] = None
+ASSESSOR: Optional[assess.Assessor] = None
 
 
 @app.on_event("startup")
 def _startup() -> None:
-    global COHORT
+    global COHORT, ASSESSOR
     log.info("Loading cohort (first run builds the cache, ~1 min)...")
     COHORT = engine.load_cohort()
     log.info("Cohort ready: %d patients", len(COHORT.patients))
+    ASSESSOR = assess.Assessor.load()
+    log.info("Assessment model ready")
 
 
 # ------------------------------------------------------------------ helpers
@@ -177,6 +182,29 @@ def _summary(rec: engine.PatientRecord, h: int, now: int) -> Dict[str, Any]:
     }
 
 
+def _labs_table(rec: engine.PatientRecord, h: int) -> List[Dict[str, Any]]:
+    labs = []
+    for name in engine.LABS:
+        latest = _latest(rec, name, h)
+        if latest["value"] is None:
+            continue
+        m = clinical.MEASUREMENTS[name]
+        col = rec.raw[name].iloc[: h + 1].dropna()
+        labs.append({
+            "name": name,
+            "label": m["label"],
+            "unit": m["unit"],
+            "group": m.get("group", "Other"),
+            "low": m["low"],
+            "high": m["high"],
+            "dp": m["dp"],
+            **latest,
+            "count": int(len(col)),
+            "history": [{"i": int(k), "icu_hour": _icu_hour(rec, int(k)), "value": round(float(v), m["dp"])} for k, v in col.tail(8).items()],
+        })
+    return labs
+
+
 # ------------------------------------------------------------------- routes
 
 @app.get("/api/health")
@@ -243,25 +271,7 @@ def patient(
             row[col] = _f(rec.raw[col].iloc[i], 3) if col in rec.raw.columns else None
         series.append(row)
 
-    labs = []
-    for name in engine.LABS:
-        latest = _latest(rec, name, h)
-        if latest["value"] is None:
-            continue
-        m = clinical.MEASUREMENTS[name]
-        col = rec.raw[name].iloc[: h + 1].dropna()
-        labs.append({
-            "name": name,
-            "label": m["label"],
-            "unit": m["unit"],
-            "group": m.get("group", "Other"),
-            "low": m["low"],
-            "high": m["high"],
-            "dp": m["dp"],
-            **latest,
-            "count": int(len(col)),
-            "history": [{"i": int(k), "icu_hour": _icu_hour(rec, int(k)), "value": round(float(v), m["dp"])} for k, v in col.tail(8).items()],
-        })
+    labs = _labs_table(rec, h)
 
     summary = _summary(rec, h, now)
     latest_all = {n: _latest(rec, n, h) for n in ("Lactate", "MAP", "SBP")}
@@ -272,6 +282,129 @@ def patient(
         "labs": labs,
         "bundle": clinical.bundle_prompts(latest_all, summary["risk"], c.threshold, summary["alert"]),
         "measurements": {k: {kk: v[kk] for kk in ("label", "unit", "low", "high", "dp")} for k, v in clinical.MEASUREMENTS.items()},
+    }
+
+
+# ----------------------------------------------------------- assessment
+
+class Reading(BaseModel):
+    hours_ago: int = Field(0, ge=0, le=assess.MAX_HOURS_BACK)
+    values: Dict[str, Optional[float]] = Field(default_factory=dict)
+
+
+class AssessRequest(BaseModel):
+    age: float = Field(..., ge=18, le=105)
+    sex: str = Field("M", pattern="^(M|F)$")
+    unit: str = Field("MICU", pattern="^(MICU|SICU)$")
+    icu_hours: int = Field(12, ge=1, le=2000, description="Hours since ICU admission, now")
+    hosp_to_icu_hours: float = Field(0, ge=0, le=5000)
+    readings: List[Reading] = Field(..., min_length=1, max_length=8)
+
+
+@app.get("/api/assess/fields")
+def assess_fields() -> Dict[str, Any]:
+    out = []
+    for name, (lo, hi) in assess.INPUT_FIELDS.items():
+        m = clinical.MEASUREMENTS[name]
+        out.append({
+            "name": name,
+            "label": m["label"],
+            "short": m.get("short", m["label"]),
+            "unit": m["unit"],
+            "kind": m["kind"],
+            "group": "Vital signs" if m["kind"] == "vital" else m.get("group", "Other"),
+            "ref_low": m["low"],
+            "ref_high": m["high"],
+            "min": lo,
+            "max": hi,
+            "dp": m["dp"],
+        })
+    return {"fields": out, "max_hours_back": assess.MAX_HOURS_BACK}
+
+
+@app.post("/api/assess")
+def assess_patient(req: AssessRequest) -> Dict[str, Any]:
+    c = _cohort()
+    if ASSESSOR is None:
+        raise HTTPException(503, "Assessment model still loading")
+
+    # Validate entries
+    errors: List[str] = []
+    seen_hours = set()
+    for r in req.readings:
+        if r.hours_ago in seen_hours:
+            errors.append(f"Two readings are both {r.hours_ago} h ago; merge them into one column.")
+        seen_hours.add(r.hours_ago)
+        for name, val in r.values.items():
+            if val is None:
+                continue
+            if name not in assess.INPUT_FIELDS:
+                errors.append(f"Unknown measurement '{name}'.")
+                continue
+            lo, hi = assess.INPUT_FIELDS[name]
+            if not (lo <= val <= hi):
+                label = clinical.MEASUREMENTS[name]["label"]
+                errors.append(f"{label} {val:g} is outside the accepted range {lo:g}–{hi:g} {clinical.MEASUREMENTS[name]['unit']}.")
+    if not any(v is not None for r in req.readings for v in r.values.values()):
+        errors.append("Enter at least one vital sign or lab value.")
+    if errors:
+        raise HTTPException(422, {"errors": errors})
+
+    raw, warnings = assess.build_grid(
+        [r.model_dump() for r in req.readings], req.age, req.sex, req.unit, req.icu_hours, req.hosp_to_icu_hours
+    )
+    scored = ASSESSOR.score(raw)
+    n = len(raw)
+    rec = engine.PatientRecord(
+        pid="assessment",
+        bed="New assessment",
+        unit=req.unit,
+        age=req.age,
+        sex=req.sex,
+        hosp_adm_hours=req.hosp_to_icu_hours,
+        n_hours=n,
+        base_hour=n - 1,
+        sepsis_label_hour=None,
+        selection_reason="manual",
+        raw=raw.reset_index(drop=True),
+        risk=scored["risk"],
+        raw_score=scored["raw_score"],
+        member_risk=scored["members"],
+        alert=engine.causal_persistence_alert(scored["raw_score"], c.threshold),
+        contrib=scored["contrib"],
+        feature_values=scored["features"],
+    )
+    h = n - 1
+    summary = _summary(rec, h, h)
+    entered_hours = sorted({h - r.hours_ago for r in req.readings})
+    series = [
+        {
+            "i": i,
+            "hours_ago": h - i,
+            "icu_hour": _icu_hour(rec, i),
+            "risk": round(float(rec.risk[i]), 4),
+            "raw_score": round(float(rec.raw_score[i]), 4),
+            "alert": int(rec.alert[i]),
+            "entered": i in entered_hours,
+        }
+        for i in range(n)
+    ]
+    latest_all = {k: _latest(rec, k, h) for k in ("Lactate", "MAP", "SBP")}
+    drivers = engine.grouped_drivers(rec, h, c.feature_names)
+    if any(d["concept"] == "time" for d in drivers[:3]):
+        warnings.insert(0,
+            "Time in ICU is one of the strongest drivers of this score. The model learned that longer stays carry "
+            "more risk (an artifact of the PhysioNet data), so identical vitals score higher later in a stay. "
+            "Interpret with caution."
+        )
+    return {
+        "summary": summary,
+        "series": series,
+        "drivers": drivers,
+        "labs": _labs_table(rec, h),
+        "bundle": clinical.bundle_prompts(latest_all, summary["risk"], c.threshold, summary["alert"]),
+        "measurements": {k: {kk: v[kk] for kk in ("label", "unit", "low", "high", "dp")} for k, v in clinical.MEASUREMENTS.items()},
+        "warnings": warnings,
     }
 
 

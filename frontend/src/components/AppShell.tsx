@@ -4,6 +4,7 @@ import {
   BookOpenCheck,
   ChevronLeft,
   ChevronRight,
+  ClipboardPlus,
   FlaskConical,
   Keyboard,
   LayoutGrid,
@@ -23,6 +24,7 @@ import { Dialog, IconButton, Kbd, Popover, Switch, Tooltip } from "./ui";
 
 const NAV = [
   { to: "/", label: "Ward overview", icon: LayoutGrid, end: true },
+  { to: "/assess", label: "New assessment", icon: ClipboardPlus, end: false },
   { to: "/model", label: "Model facts", icon: BookOpenCheck, end: false },
 ];
 
@@ -43,6 +45,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       else if (e.key === "[") setOffset((o) => Math.max(0, o - 1));
       else if (e.key === "t") setTheme(theme === "dark" ? "light" : "dark");
       else if (e.key === "g") navigate("/");
+      else if (e.key === "n") navigate("/assess");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -255,6 +258,8 @@ const SHORTCUTS: [string[], string][] = [
   [["A"], "Acknowledge the open patient's alert"],
   [["T"], "Toggle night mode"],
   [["G"], "Go to ward overview"],
+  [["N"], "New assessment (enter vitals and labs)"],
+  [["Ctrl", "Enter"], "Run the assessment"],
   [["?"], "Show this list"],
 ];
 
