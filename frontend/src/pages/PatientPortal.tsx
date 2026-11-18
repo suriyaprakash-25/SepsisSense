@@ -22,9 +22,9 @@ import {
 } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { RISK_SCALE_MAX } from "../components/clinical";
+import { RISK_SCALE_MAX, riskTicks, setRiskScaleMax } from "../components/clinical";
 import { Card, EmptyState, IconButton, Skeleton } from "../components/ui";
-import { useLogout, usePatient, useReplay, useSession } from "../lib/api";
+import { useLogout, useMeta, usePatient, useReplay, useSession } from "../lib/api";
 import { num } from "../lib/format";
 import { usePrefs } from "../lib/prefs";
 import type { LabRow, Measurement, PatientDetail, SeriesRow } from "../lib/types";
@@ -99,6 +99,8 @@ export function PatientPortal() {
   const { data: user } = useSession();
   const replay = useReplay(true);
   const { data, isLoading, isError, error } = usePatient(user?.pid ?? undefined, replay.data?.offset, null, true);
+  const meta = useMeta();
+  setRiskScaleMax(meta.data?.risk_scale_max);
 
   return (
     <PortalShell>
@@ -253,8 +255,8 @@ function PortalContent({ d, name }: { d: PatientDetail; name: string }) {
             </div>
           </div>
           <p className="mt-4 rounded-lg bg-subtle px-3 py-2 text-xs leading-5 text-muted">
-            This is an estimate, not a promise of what will happen. The model misses many cases, so a low number does not
-            mean sepsis is impossible.
+            This is an estimate, not a promise of what will happen. The model misses some cases (about 1 in 3), so a low
+            number does not mean sepsis is impossible.
           </p>
         </Card>
       </div>
@@ -434,7 +436,7 @@ function RiskHistory({ series }: { series: SeriesRow[] }) {
             />
             <YAxis
               domain={[0, RISK_SCALE_MAX]}
-              ticks={[0, 0.1, 0.2, 0.3, 0.4]}
+              ticks={riskTicks(4)}
               tickFormatter={(v) => `${Math.round(v * 100)}`}
               tick={{ fill: c.faint, fontSize: 11 }}
               tickLine={false}

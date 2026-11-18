@@ -20,7 +20,8 @@ import {
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { useLogout, useReplay, useSession, useSetReplay } from "../lib/api";
+import { useLogout, useMeta, useReplay, useSession, useSetReplay } from "../lib/api";
+import { setRiskScaleMax } from "./clinical";
 import { usePrefs } from "../lib/prefs";
 import { Dialog, IconButton, Kbd, Popover, Switch, Tooltip } from "./ui";
 
@@ -35,6 +36,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { sidebarCollapsed, setSidebarCollapsed, theme, setTheme } = usePrefs();
   const replay = useReplay();
   const setReplay = useSetReplay();
+  const meta = useMeta();
+  setRiskScaleMax(meta.data?.risk_scale_max);
   const offset = replay.data?.offset ?? 0;
   const maxOffset = replay.data?.max_offset ?? 24;
   // The replay clock is shared server-side: every clinician and patient sees the same "now".

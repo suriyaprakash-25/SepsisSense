@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Area, AreaChart, ReferenceLine, ResponsiveContainer, Tooltip as RTooltip, XAxis, YAxis } from "recharts";
-import { RISK_SCALE_MAX } from "../components/clinical";
+import { RISK_SCALE_MAX, riskTicks } from "../components/clinical";
 import { CriteriaCard, RiskSummaryCard } from "../components/riskCards";
 import { Button, Card, CardHeader, EmptyState, Kbd, Segmented, Skeleton } from "../components/ui";
 import { HttpError, useAssess, useAssessFields, useMeta } from "../lib/api";
@@ -656,7 +656,7 @@ function WindowTrend({ data, cutoff }: { data: AssessResponse; cutoff: number })
             />
             <YAxis
               domain={[0, RISK_SCALE_MAX]}
-              ticks={[0, 0.2, 0.4]}
+              ticks={riskTicks(2)}
               tickFormatter={(v) => `${Math.round(v * 100)}%`}
               tick={{ fill: c.faint, fontSize: 11 }}
               tickLine={false}

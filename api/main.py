@@ -30,13 +30,14 @@ import assess  # noqa: E402
 import auth  # noqa: E402
 import clinical  # noqa: E402
 import engine  # noqa: E402
+import features_v2 as fv  # noqa: E402
 import state  # noqa: E402
 from auth import current_user, require_clinician  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("sepsissense.api")
 
-ELEVATED_CUTOFF = 0.08  # display band only (~3.5x the hourly base rate); not validated
+ELEVATED_CUTOFF = 0.08  # display band only; recomputed at startup from the model (see _startup)
 MAX_OFFSET = 24
 STALE_VITAL_HOURS = 4
 
@@ -68,7 +69,19 @@ def _startup() -> None:
     log.info("Loading cohort (first run builds the cache, ~1 min)...")
     COHORT = engine.load_cohort()
     log.info("Cohort ready: %d patients", len(COHORT.patients))
+    # Demo patient logins follow the current ward: "patient" gets the septic alert example.
+    recs = list(COHORT.patients.values())
+    alert_ex = next((r for r in recs if r.selection_reason == "alert_example" and r.sepsis_label_hour is not None), None)         or next((r for r in recs if r.sepsis_label_hour is not None), recs[0])
+    second = next((r for r in recs if r.pid != alert_ex.pid and r.sepsis_label_hour is not None), recs[-1])
+    for acc, rec in zip([a for a in auth.DEMO_ACCOUNTS if a["role"] == "patient"], (alert_ex, second)):
+        acc["pid"], acc["display_name"] = rec.pid, f"Patient in {rec.bed}"
     auth.init_users(list(COHORT.patients))
+    for line in auth.relink_patients({p: r.bed for p, r in COHORT.patients.items()},
+                                     {"patient": alert_ex.pid, "patient2": second.pid}):
+        log.info("Re-linked patient account %s", line)
+    # "Elevated" display band: 2.5x the hourly base rate, kept below the alert threshold. Not validated.
+    global ELEVATED_CUTOFF
+    ELEVATED_CUTOFF = round(min(2.5 * COHORT.base_rate, 0.6 * COHORT.threshold), 3)
     ASSESSOR = assess.Assessor.load()
     log.info("Assessment model ready")
 
@@ -256,6 +269,8 @@ def meta(user: Dict[str, Any] = Depends(current_user)) -> Dict[str, Any]:
     return {
         "threshold": c.threshold,
         "elevated_cutoff": ELEVATED_CUTOFF,
+        "risk_scale_max": c.risk_scale_max,
+        "alert_scale": "calibrated",
         "base_rate": round(c.base_rate, 4),
         "max_offset": MAX_OFFSET,
         "n_features": len(c.feature_names),
@@ -425,7 +440,7 @@ def assess_patient(req: AssessRequest, user: Dict[str, Any] = Depends(require_cl
         risk=scored["risk"],
         raw_score=scored["raw_score"],
         member_risk=scored["members"],
-        alert=engine.causal_persistence_alert(scored["raw_score"], c.threshold),
+        alert=fv.causal_alerts(scored["risk"], np.zeros(n), c.threshold).astype(int),
         contrib=scored["contrib"],
         feature_values=scored["features"],
     )
@@ -510,7 +525,8 @@ def demo_accounts() -> Dict[str, Any]:
     existing = {u["username"] for u in auth.list_users()}
     return {
         "accounts": [
-            {"username": a["username"], "password": a["password"], "role": a["role"], "display_name": a["display_name"]}
+            {"username": a["username"], "password": a["password"], "role": a["role"],
+             "display_name": (auth.get_user(a["username"]) or a)["display_name"]}
             for a in auth.DEMO_ACCOUNTS
             if a["username"] in existing and auth.verify_password(a["password"], auth.get_user(a["username"])["password_hash"])
         ]

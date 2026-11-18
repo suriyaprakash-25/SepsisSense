@@ -82,3 +82,5 @@ frontend/dist/
 *.tsbuildinfo
 api/.data/
 !frontend/src/lib/
+models/*.npz
+models/v1_backup/

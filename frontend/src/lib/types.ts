@@ -119,6 +119,8 @@ export interface PatientDetail {
 export interface Meta {
   threshold: number;
   elevated_cutoff: number;
+  risk_scale_max: number;
+  alert_scale: string;
   base_rate: number;
   max_offset: number;
   n_features: number;
@@ -136,21 +138,19 @@ export interface Meta {
     alert_recall: number;
     septic_patients_alerted: number;
     non_septic_patients_alerted: number;
+    physionet_utility?: number;
   };
   internal_validation: {
+    version?: number;
     total_patients?: number;
     total_records?: number;
     sepsis_patients?: number;
-    validation_metrics?: {
-      roc_auc: number;
-      pr_auc: number;
-      brier_score: number;
-      filtered_precision: number;
-      filtered_recall: number;
-      specificity: number;
-      physionet_utility: number;
-      confusion_matrix: { tn: number; fp: number; fn: number; tp: number };
-    };
+    calibrator_max?: number;
+    training_rows_after_mining?: number;
+    split?: Record<"train" | "calibration" | "test", { patients: number; septic: number }>;
+    devices?: { xgboost: string; lightgbm: string; random_forest: string };
+    validation_metrics?: EvalMetrics;
+    test_by_set?: { A: EvalMetrics; B: EvalMetrics };
   };
 }
 
@@ -260,4 +260,22 @@ export interface PublicSummary {
   internal: { roc_auc?: number; pr_auc?: number; brier_score?: number };
   n_features: number;
   base_rate: number;
+}
+
+export interface EvalMetrics {
+  patients: number;
+  hours: number;
+  septic_patients: number;
+  positive_hour_rate: number;
+  roc_auc: number;
+  pr_auc: number;
+  brier_score: number;
+  alert_precision: number | null;
+  alert_recall: number;
+  specificity: number;
+  confusion_matrix: { tn: number; fp: number; fn: number; tp: number };
+  septic_patients_alerted: number;
+  non_septic_patients_alerted: number;
+  median_hours_alert_before_onset: number | null;
+  physionet_utility: number;
 }

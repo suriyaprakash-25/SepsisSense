@@ -70,7 +70,7 @@ FEATURE_CONCEPT: Dict[str, Dict[str, Any]] = {
     "chemistry": dict(label="Electrolytes / glucose", primary=None),
     "hematology": dict(label="Hemoglobin / hematocrit", primary="Hgb"),
     "cardiac": dict(label="Troponin", primary="TroponinI"),
-    "lab_pattern": dict(label="Which labs have been drawn", primary=None),
+    "lab_pattern": dict(label="Recent lab testing", primary=None),
     "time": dict(label="Time in ICU / hospital", primary=None),
     "demographics": dict(label="Age / sex / unit", primary=None),
 }
@@ -105,7 +105,7 @@ FEATURE_LABELS = {
     "Temp_roll6h": "Temp, 6 h mean", "Resp_roll6h": "RR, 6 h mean", "O2Sat_roll6h": "SpO₂, 6 h mean",
     "shock_index": "Shock index (HR/SBP)", "modified_shock_index": "Modified shock index (HR/MAP)",
     "qsofa_score": "qSOFA (RR ≥ 22, SBP ≤ 100)", "lactate_creatinine_ratio": "Lactate / creatinine ratio",
-    "wbc_temp_interaction": "WBC × temperature", "diagnostic_intensity_6h": "Number of key labs on the chart",
+    "wbc_temp_interaction": "WBC × temperature", "diagnostic_intensity_6h": "Key labs drawn in the last 6 h",
     "ICULOS": "Hours in ICU", "HospAdmTime": "Hours from hospital to ICU admission",
     "Unit1": "Medical ICU", "Unit2": "Surgical ICU", "Gender": "Sex",
 }
@@ -124,10 +124,10 @@ def feature_label(feature: str) -> str:
         return FEATURE_LABELS[feature]
     if feature.endswith("_measured_mask"):
         base = feature.replace("_measured_mask", "")
-        return f"{MEASUREMENTS.get(base, {}).get('label', base)} charted this stay (1 = yes)"
+        return f"{MEASUREMENTS.get(base, {}).get('label', base)} drawn this hour (1 = yes)"
     if feature.endswith("_hours_since_meas"):
         base = feature.replace("_hours_since_meas", "")
-        return f"{MEASUREMENTS.get(base, {}).get('label', base)} not yet charted (99 = never, 0 = charted)"
+        return f"Hours since last {MEASUREMENTS.get(base, {}).get('label', base)} (99+ = not yet drawn)"
     return MEASUREMENTS.get(feature, {}).get("label", feature)
 
 

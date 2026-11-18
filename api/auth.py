@@ -135,6 +135,44 @@ def init_users(valid_pids: List[str]) -> None:
         _save(users)
 
 
+def relink_patients(beds: Dict[str, str], preferred: Dict[str, str]) -> List[str]:
+    """
+    Re-link patient accounts whose record is no longer on the ward (e.g. after
+    retraining changes the held-out test split). `beds` maps pid -> bed label.
+    Preferred targets are used first; otherwise the bed named in the account's
+    display name, otherwise any ward patient without an account. Returns a log.
+    Re-linked users are signed out (token version bumped).
+    """
+    changes = []
+    with _lock:
+        users = _load()
+        taken = {u.get("pid") for u in users.values() if u["role"] == "patient" and u.get("pid") in beds}
+        bed_to_pid = {b: p for p, b in beds.items()}
+        for name, u in users.items():
+            if u["role"] != "patient" or u.get("pid") in beds:
+                continue
+            target = preferred.get(name)
+            if target in taken or target not in beds:
+                target = None
+            if target is None:
+                old_bed = u.get("display_name", "").replace("Patient in ", "").strip()
+                cand = bed_to_pid.get(old_bed)
+                target = cand if cand and cand not in taken else None
+            if target is None:
+                target = next((p for p in beds if p not in taken), None)
+            if target is None:
+                continue
+            old = u.get("pid")
+            u["pid"] = target
+            u["display_name"] = f"Patient in {beds[target]}"
+            u["token_version"] = int(u.get("token_version", 1)) + 1
+            taken.add(target)
+            changes.append(f"{name}: {old} -> {target} ({beds[target]})")
+        if changes:
+            _save(users)
+    return changes
+
+
 def _new_user(username: str, display_name: str, role: str, pid: Optional[str], password: str) -> Dict[str, Any]:
     return {
         "username": username,

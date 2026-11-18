@@ -264,8 +264,11 @@ export function WardPage() {
         <span>
           <strong className="font-medium text-ink">Risk</strong> is the model's calibrated hourly probability that the stay
           is within 6 h of meeting Sepsis-3 criteria (ICU baseline ≈ {Math.round((meta.data?.base_rate ?? 0.023) * 1000) / 10}%).
-          A <strong className="font-medium text-ink">model alert</strong> uses the precision-tuned threshold and catches only a
-          small share of cases. <strong className="font-medium text-ink">A low score does not rule out sepsis.</strong>
+          A <strong className="font-medium text-ink">model alert</strong> uses a threshold that balances catching sepsis against
+          false alarms
+          {meta.data &&
+            `: on held-out patients it alerted on ${Math.round((meta.data.pool.septic_patients_alerted / Math.max(1, meta.data.pool.septic_patients)) * 100)}% of septic and ${Math.round((meta.data.pool.non_septic_patients_alerted / Math.max(1, meta.data.pool.patients - meta.data.pool.septic_patients)) * 100)}% of non-septic patients`}
+          . <strong className="font-medium text-ink">A low score does not rule out sepsis.</strong>
         </span>
       </p>
     </div>

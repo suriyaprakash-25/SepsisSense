@@ -3,20 +3,21 @@ import { ArrowUpRight, BellRing, CircleCheck, HeartPulse, Siren } from "lucide-r
 
 /**
  * A hand-built, static preview of the product for the landing page. Values mirror
- * the demo ward (MICU-15 is the replayed stay where the model alerts).
+ * the demo ward on model v2 (held-out test patients; SICU-03 is the highest-risk
+ * alert, and its real top drivers are shown, including time in ICU).
  */
 
 const ROWS = [
-  { bed: "MICU-15", who: "70 F · Day 3", risk: 38, tier: "alert", spark: [10, 10, 9, 13, 13, 9, 13, 28, 38], hr: 102, map: 90 },
-  { bed: "MICU-09", who: "74 M · Day 2", risk: 9, tier: "elevated", spark: [5, 5, 5, 5, 9, 9, 9, 9, 9], hr: 106, map: 58 },
-  { bed: "SICU-02", who: "57 M · Day 1", risk: 9, tier: "elevated", spark: [9, 10, 9, 9, 9, 9, 9, 9, 9], hr: 84, map: 69 },
-  { bed: "MICU-02", who: "58 M · Day 2", risk: 5, tier: "low", spark: [2, 2, 4, 5, 5, 5, 5, 5, 5], hr: 113, map: 75 },
+  { bed: "SICU-03", who: "69 M · Day 4", risk: 17, tier: "alert", spark: [12, 15, 15, 15, 12, 15, 15, 17, 17], hr: 89, map: 78 },
+  { bed: "MICU-14", who: "56 M · Day 3", risk: 8, tier: "alert", spark: [4, 4, 5, 8, 8, 8, 8, 9, 8], hr: 62, map: 76 },
+  { bed: "MICU-10", who: "70 M · Day 3", risk: 5, tier: "elevated", spark: [4, 4, 4, 4, 6, 6, 6, 5, 5], hr: 84, map: 60 },
+  { bed: "MICU-09", who: "58 M · Day 2", risk: 2, tier: "low", spark: [1, 1, 1, 1, 2, 2, 2, 2, 2], hr: 92, map: 106 },
 ] as const;
 
 function Spark({ values, tier }: { values: readonly number[]; tier: string }) {
   const w = 64;
   const h = 20;
-  const pts = values.map((v, i) => `${(i / (values.length - 1)) * w},${h - 2 - (v / 40) * (h - 4)}`).join(" ");
+  const pts = values.map((v, i) => `${(i / (values.length - 1)) * w},${h - 2 - (v / 20) * (h - 4)}`).join(" ");
   const color = tier === "alert" ? "var(--alert)" : tier === "elevated" ? "var(--warn)" : "var(--faint)";
   return (
     <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden className="overflow-visible">
@@ -54,9 +55,9 @@ export function HeroPreview() {
         </div>
         <div className="grid grid-cols-3 gap-2 px-4 pt-3">
           {[
-            { k: "Model alerts", v: "1", tone: "text-alert-ink" },
-            { k: "Elevated", v: "2", tone: "text-warn-ink" },
-            { k: "Vitals overdue", v: "0", tone: "text-ink" },
+            { k: "Model alerts", v: "5", tone: "text-alert-ink" },
+            { k: "Elevated", v: "1", tone: "text-warn-ink" },
+            { k: "Beds", v: "18", tone: "text-ink" },
           ].map((t) => (
             <div key={t.k} className="rounded-lg border border-line px-2.5 py-2">
               <div className={clsx("text-lg font-semibold tnum", t.tone)}>{t.v}</div>
@@ -104,12 +105,12 @@ export function HeroPreview() {
 
       {/* Why card */}
       <div className="landing-float absolute -bottom-28 -left-4 hidden w-56 rounded-xl border border-line bg-surface p-3 shadow-pop sm:block lg:-left-12">
-        <div className="text-[11px] font-semibold text-ink">Why MICU-15 is flagged</div>
+        <div className="text-[11px] font-semibold text-ink">Why SICU-03 is flagged</div>
         <ul className="mt-2 space-y-1.5">
           {[
-            { k: "WBC 16.3", w: 78 },
-            { k: "Temperature 38.3 °C", w: 52 },
-            { k: "Heart rate 102", w: 34 },
+            { k: "Time in ICU 74 h", w: 90 },
+            { k: "Respiratory rate 30", w: 22 },
+            { k: "WBC 30.5", w: 16 },
           ].map((d) => (
             <li key={d.k}>
               <div className="flex items-center justify-between text-[10px] text-muted">
@@ -141,12 +142,12 @@ export function HeroPreview() {
         <div className="mt-2.5 flex items-center gap-3">
           <div className="grid grid-cols-10 gap-[2px]">
             {Array.from({ length: 100 }, (_, i) => (
-              <span key={i} className={clsx("size-[5px] rounded-full", i < 38 ? "bg-alert" : "bg-line")} />
+              <span key={i} className={clsx("size-[5px] rounded-full", i < 17 ? "bg-alert" : "bg-line")} />
             ))}
           </div>
           <div>
             <div className="text-xl font-semibold text-ink tnum">
-              38 <span className="text-xs font-medium text-muted">in 100</span>
+              17 <span className="text-xs font-medium text-muted">in 100</span>
             </div>
             <div className="text-[10px] leading-tight text-muted">chance of sepsis in the next ~6 h</div>
           </div>

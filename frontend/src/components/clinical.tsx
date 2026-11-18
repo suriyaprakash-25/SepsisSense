@@ -13,8 +13,18 @@ import { ago, num, pct, TIER_LABEL } from "../lib/format";
 import type { Measurement, PatientSummary, Tier } from "../lib/types";
 import { Badge, Tooltip } from "./ui";
 
-/** Calibrated risk never exceeds ~0.39, so all risk visuals share a 0–40 % scale. */
-export const RISK_SCALE_MAX = 0.4;
+/**
+ * Upper end of every risk visual (bars, sparklines, charts), so they share one scale.
+ * Set from the server (meta.risk_scale_max = the calibrator's maximum, rounded up).
+ * ES modules export live bindings, so importers always read the current value.
+ */
+export let RISK_SCALE_MAX = 0.4;
+export function setRiskScaleMax(v: number | undefined) {
+  if (v && v > 0) RISK_SCALE_MAX = v;
+}
+export function riskTicks(n = 4): number[] {
+  return Array.from({ length: n + 1 }, (_, i) => +((RISK_SCALE_MAX * i) / n).toFixed(3));
+}
 
 export const tierText: Record<Tier, string> = {
   alert: "text-alert-ink",

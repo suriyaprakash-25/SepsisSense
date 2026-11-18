@@ -307,9 +307,9 @@ function HowItWorks() {
     },
     {
       icon: BellRing,
-      title: "Alerts only when it's confident",
-      body: "Alerts need two consecutive high hours. A clinician reviews each one, and the patient sees that it was reviewed.",
-      detail: "Precision-tuned threshold + Hour-1 bundle checklist",
+      title: "Alerts, with a cap on false alarms",
+      body: "An alert needs two consecutive high hours. A clinician reviews each one, and the patient sees that it was reviewed.",
+      detail: "Threshold tuned to the PhysioNet utility, capped at ~1 in 8 false alerts",
     },
   ];
   return (
@@ -507,27 +507,29 @@ function Principles() {
 function Evidence() {
   const { data } = usePublicSummary();
   const p = data?.pool;
+  const caught = p ? p.septic_patients_alerted / Math.max(1, p.septic_patients) : 0.63;
+  const falseRate = p ? p.non_septic_patients_alerted / Math.max(1, p.patients - p.septic_patients) : 0.125;
   const metrics = [
     {
-      v: p ? pctFmt(p.alert_precision) : "29%",
-      k: "of alert hours fell within 6 hours of sepsis onset",
-      note: "When it alerts, take it seriously.",
+      v: p ? `${p.septic_patients_alerted} / ${p.septic_patients}` : "368 / 587",
+      k: `patients who developed sepsis were alerted (${pctFmt(caught)})`,
+      note: `About ${Math.round(caught * 3)} in 3 cases caught; the rest are missed.`,
     },
     {
-      v: p ? `${p.non_septic_patients_alerted} / ${(p.patients - p.septic_patients).toLocaleString()}` : "0 / 1,362",
-      k: "patients who never developed sepsis received an alert",
-      note: "Very few false alarms.",
-    },
-    {
-      v: p ? `${p.septic_patients_alerted} / ${p.septic_patients}` : "9 / 138",
-      k: "patients who developed sepsis were alerted",
-      note: "Most cases are missed — a quiet tool is not reassurance.",
+      v: p ? `${p.non_septic_patients_alerted.toLocaleString()} / ${(p.patients - p.septic_patients).toLocaleString()}` : "932 / 7,481",
+      k: `patients who never developed sepsis received at least one alert (${pctFmt(falseRate)})`,
+      note: `About 1 in ${Math.round(1 / Math.max(falseRate, 0.01))} get a false alarm during their stay.`,
       warn: true,
     },
     {
-      v: p ? p.hour_roc_auc.toFixed(2) : "0.68",
-      k: "ROC-AUC on unseen stays (0.80 on the internal split)",
-      note: "Moderate ability to rank risk.",
+      v: p ? pctFmt(p.alert_precision) : "11%",
+      k: "of alert hours fell within 6 hours of sepsis onset, or after it",
+      note: "An alert is a prompt to look, not a diagnosis.",
+    },
+    {
+      v: p ? p.hour_roc_auc.toFixed(2) : "0.83",
+      k: "ROC-AUC on held-out patients (0.80 and 0.86 in the two hospital systems)",
+      note: "Good ability to rank who is at higher risk.",
     },
   ];
   return (
@@ -535,15 +537,17 @@ function Evidence() {
       <div className="grid gap-12 lg:grid-cols-[1fr_1.4fr]">
         <div data-reveal className="reveal">
           <Eyebrow>The evidence, without the spin</Eyebrow>
-          <H2>Precise when it speaks. Quiet more often than it should be.</H2>
+          <H2>Catches most cases, at the cost of some false alarms.</H2>
           <p className="mt-4 text-[15px] leading-7 text-muted">
-            Tested on {p ? p.patients.toLocaleString() : "1,500"} real ICU stays from the public PhysioNet 2019 dataset that
-            the model never saw during training. These figures are computed live by the server.
+            Trained on all 40,336 ICU stays in the public PhysioNet 2019 dataset, then tested on{" "}
+            {p ? p.patients.toLocaleString() : "8,068"} patients held out from training, calibration and threshold choice.
+            These figures are computed live by the server.
           </p>
           <div className="mt-6 rounded-2xl border border-warn-line bg-warn-soft p-5">
             <p className="text-sm leading-6 text-warn-ink">
-              <strong className="font-semibold">How to use it:</strong> treat an alert as a strong prompt to review the
-              patient. Never treat the absence of an alert as evidence that a patient does not have sepsis.
+              <strong className="font-semibold">How to use it:</strong> treat an alert as a prompt to review the patient.
+              About a third of septic patients are never alerted, so never treat a quiet tool as evidence that a patient
+              does not have sepsis.
             </p>
           </div>
         </div>
@@ -599,7 +603,7 @@ function Trust() {
 const FAQS: { q: string; a: string }[] = [
   {
     q: "Does a low score mean there is no sepsis?",
-    a: "No. The model misses most cases of sepsis. A low score only means the tool has not found a warning pattern. Clinical assessment always comes first, and patients should tell their nurse if they feel worse.",
+    a: "No. The model misses about a third of sepsis cases. A low score only means the tool has not found a warning pattern. Clinical assessment always comes first, and patients should tell their nurse if they feel worse.",
   },
   {
     q: "What happens when an alert fires?",

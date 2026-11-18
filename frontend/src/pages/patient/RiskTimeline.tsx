@@ -9,7 +9,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { RISK_SCALE_MAX } from "../../components/clinical";
+import { RISK_SCALE_MAX, riskTicks } from "../../components/clinical";
 import { pct } from "../../lib/format";
 import type { SeriesRow } from "../../lib/types";
 import { useChartTheme } from "../../lib/useChartTheme";
@@ -91,7 +91,7 @@ export function RiskTimeline({ series, viewIcuHour, elevatedCutoff, onPick, rese
           />
           <YAxis
             domain={[0, RISK_SCALE_MAX]}
-            ticks={[0, 0.1, 0.2, 0.3, 0.4]}
+            ticks={riskTicks(4)}
             tickFormatter={(v) => `${Math.round(v * 100)}%`}
             tick={{ fill: c.faint, fontSize: 11 }}
             tickLine={false}

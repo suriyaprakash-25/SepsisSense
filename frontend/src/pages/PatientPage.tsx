@@ -18,7 +18,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { CriteriaCard, RiskSummaryCard } from "../components/riskCards";
 import { Badge, Button, Card, CardHeader, EmptyState, Kbd, Skeleton } from "../components/ui";
 import { useAck, useMeta, usePatient, useReplay } from "../lib/api";
-import { icuDay, sexLabel } from "../lib/format";
+import { icuDay, pct, sexLabel } from "../lib/format";
 import { usePrefs } from "../lib/prefs";
 import type { Meta, PatientSummary } from "../lib/types";
 import { AckDialog } from "./patient/AckDialog";
@@ -315,7 +315,7 @@ function ResearchCard({ s, meta }: { s: PatientSummary; meta?: Meta }) {
         <div className="flex justify-between gap-3">
           <dt className="text-muted">Alert score vs threshold</dt>
           <dd className="font-medium text-ink tnum">
-            {s.raw_score.toFixed(3)} / {meta?.threshold ?? 0.75}
+            {pct(s.risk, 1)} / {pct(meta?.threshold ?? 0, 1)}
           </dd>
         </div>
         <div className="border-t border-line pt-2 text-xs text-muted">{SELECTION_TEXT[s.selection_reason]}</div>

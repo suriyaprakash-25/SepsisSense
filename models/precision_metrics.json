@@ -1,35 +1,401 @@
 {
-  "timestamp": "2026-10-31T18:23:46Z",
-  "data_sources": [
-    "PhysioNet_SetA",
-    "PhysioNet_SetB"
-  ],
-  "total_patients": 3000,
-  "total_records": 115974,
-  "sepsis_patients": 226,
-  "target_precision": 0.75,
-  "recommended_medical_threshold": 0.75,
-  "optimal_threshold": 0.75,
-  "validation_metrics": {
-    "roc_auc": 0.8029431941340341,
-    "pr_auc": 0.09161178050838051,
-    "brier_score": 0.017554850518820175,
-    "high_precision_mode": {
-      "threshold": 0.75,
-      "target_precision": ">=75.0%",
-      "specificity": ">99.9%"
-    },
-    "raw_precision": 0.3068181818181818,
-    "filtered_precision": 0.3068181818181818,
-    "filtered_recall": 0.06367924528301887,
-    "filtered_f1": 0.10546874999999999,
-    "specificity": 0.9972431870565373,
-    "physionet_utility": -0.7253888855555566,
-    "confusion_matrix": {
-      "tn": 22066,
-      "fp": 61,
-      "fn": 397,
-      "tp": 27
-    }
+ "version": 2,
+ "timestamp": "2026-11-18T16:54:54+00:00",
+ "data_sources": [
+  "PhysioNet_SetA",
+  "PhysioNet_SetB"
+ ],
+ "total_patients": 40336,
+ "total_records": 1552210,
+ "sepsis_patients": 2932,
+ "split": {
+  "train": {
+   "patients": 28235,
+   "septic": 2052
+  },
+  "calibration": {
+   "patients": 4033,
+   "septic": 293
+  },
+  "test": {
+   "patients": 8068,
+   "septic": 587
   }
+ },
+ "training_rows_after_mining": 1085958,
+ "devices": {
+  "xgboost": "CUDA",
+  "lightgbm": "GPU",
+  "random_forest": "CPU"
+ },
+ "threshold": {
+  "value": 0.0482,
+  "scale": "calibrated probability",
+  "rule": "maximise official PhysioNet 2019 utility on the calibration split while alerting at most 15% of non-septic patients; causal 2 h persistence",
+  "max_non_septic_alert_rate": 0.15,
+  "calibration_utility": 0.33991050500745795,
+  "calibration_precision": 0.092599291036678,
+  "calibration_recall": 0.46059733717164447,
+  "calibration_septic_patients_alerted_rate": 0.6382252559726962,
+  "calibration_non_septic_patients_alerted_rate": 0.1318181818181818,
+  "utility_optimal_alternative": {
+   "threshold": 0.024,
+   "utility": 0.40143949617633823,
+   "precision": 0.06731365609836185,
+   "recall": 0.6639078805325657,
+   "alert_rate": 0.17393484027363532,
+   "septic_patients_alerted_rate": 0.8668941979522184,
+   "non_septic_patients_alerted_rate": 0.34705882352941175
+  },
+  "high_precision_alternative": null
+ },
+ "calibrator_max": 0.16603569497025417,
+ "validation_metrics": {
+  "patients": 8068,
+  "hours": 308670,
+  "septic_patients": 587,
+  "positive_hour_rate": 0.018165030615220137,
+  "roc_auc": 0.8333817810753246,
+  "pr_auc": 0.11401985470990808,
+  "brier_score": 0.016862662075839373,
+  "alert_precision": 0.11175489421473092,
+  "alert_recall": 0.4540752630640271,
+  "specificity": 0.9332284046551377,
+  "confusion_matrix": {
+   "tn": 282827,
+   "fp": 20236,
+   "fn": 3061,
+   "tp": 2546
+  },
+  "septic_patients_alerted": 368,
+  "non_septic_patients_alerted": 932,
+  "median_hours_alert_before_onset": 28.5,
+  "physionet_utility": 0.35916662767301477
+ },
+ "test_by_set": {
+  "A": {
+   "patients": 4067,
+   "hours": 157984,
+   "septic_patients": 358,
+   "positive_hour_rate": 0.021711059347782054,
+   "roc_auc": 0.8030631598998431,
+   "pr_auc": 0.11235073994292383,
+   "brier_score": 0.02016459392340788,
+   "alert_precision": 0.11384638131145117,
+   "alert_recall": 0.4489795918367347,
+   "specificity": 0.922441347360793,
+   "confusion_matrix": {
+    "tn": 142567,
+    "fp": 11987,
+    "fn": 1890,
+    "tp": 1540
+   },
+   "septic_patients_alerted": 227,
+   "non_septic_patients_alerted": 642,
+   "median_hours_alert_before_onset": 26.0,
+   "physionet_utility": 0.3577847619047619
+  },
+  "B": {
+   "patients": 4001,
+   "hours": 150686,
+   "septic_patients": 229,
+   "positive_hour_rate": 0.01444726119214791,
+   "roc_auc": 0.8620083600364441,
+   "pr_auc": 0.117212792069316,
+   "brier_score": 0.013400811598646657,
+   "alert_precision": 0.10869800108049703,
+   "alert_recall": 0.4621038125861277,
+   "specificity": 0.9444545448424001,
+   "confusion_matrix": {
+    "tn": 140260,
+    "fp": 8249,
+    "fn": 1171,
+    "tp": 1006
+   },
+   "septic_patients_alerted": 141,
+   "non_septic_patients_alerted": 290,
+   "median_hours_alert_before_onset": 30.0,
+   "physionet_utility": 0.36136611690516607
+  }
+ },
+ "threshold_scan": [
+  {
+   "threshold": 0.0056,
+   "utility": -0.0086,
+   "precision": 0.0282,
+   "recall": 0.9417,
+   "alert_rate": 0.5894,
+   "septic_patients_alerted_rate": 0.9932,
+   "non_septic_patients_alerted_rate": 0.896
+  },
+  {
+   "threshold": 0.0061,
+   "utility": 0.1235,
+   "precision": 0.0327,
+   "recall": 0.9082,
+   "alert_rate": 0.4895,
+   "septic_patients_alerted_rate": 0.9863,
+   "non_septic_patients_alerted_rate": 0.8439
+  },
+  {
+   "threshold": 0.0076,
+   "utility": 0.1506,
+   "precision": 0.0339,
+   "recall": 0.8982,
+   "alert_rate": 0.4672,
+   "septic_patients_alerted_rate": 0.9761,
+   "non_septic_patients_alerted_rate": 0.7866
+  },
+  {
+   "threshold": 0.0088,
+   "utility": 0.1642,
+   "precision": 0.0346,
+   "recall": 0.8924,
+   "alert_rate": 0.4554,
+   "septic_patients_alerted_rate": 0.9727,
+   "non_septic_patients_alerted_rate": 0.7618
+  },
+  {
+   "threshold": 0.0102,
+   "utility": 0.2554,
+   "precision": 0.0398,
+   "recall": 0.8503,
+   "alert_rate": 0.3764,
+   "septic_patients_alerted_rate": 0.9625,
+   "non_septic_patients_alerted_rate": 0.6955
+  },
+  {
+   "threshold": 0.0104,
+   "utility": 0.2711,
+   "precision": 0.041,
+   "recall": 0.8402,
+   "alert_rate": 0.3617,
+   "septic_patients_alerted_rate": 0.959,
+   "non_septic_patients_alerted_rate": 0.6735
+  },
+  {
+   "threshold": 0.0114,
+   "utility": 0.3027,
+   "precision": 0.044,
+   "recall": 0.819,
+   "alert_rate": 0.3285,
+   "septic_patients_alerted_rate": 0.9556,
+   "non_septic_patients_alerted_rate": 0.6508
+  },
+  {
+   "threshold": 0.0153,
+   "utility": 0.3405,
+   "precision": 0.0491,
+   "recall": 0.7697,
+   "alert_rate": 0.2767,
+   "septic_patients_alerted_rate": 0.9317,
+   "non_septic_patients_alerted_rate": 0.5225
+  },
+  {
+   "threshold": 0.0159,
+   "utility": 0.379,
+   "precision": 0.0564,
+   "recall": 0.7251,
+   "alert_rate": 0.2268,
+   "septic_patients_alerted_rate": 0.901,
+   "non_septic_patients_alerted_rate": 0.4417
+  },
+  {
+   "threshold": 0.0165,
+   "utility": 0.3797,
+   "precision": 0.0566,
+   "recall": 0.7244,
+   "alert_rate": 0.2258,
+   "septic_patients_alerted_rate": 0.901,
+   "non_septic_patients_alerted_rate": 0.4409
+  },
+  {
+   "threshold": 0.0194,
+   "utility": 0.3978,
+   "precision": 0.0621,
+   "recall": 0.6977,
+   "alert_rate": 0.1982,
+   "septic_patients_alerted_rate": 0.8771,
+   "non_septic_patients_alerted_rate": 0.3818
+  },
+  {
+   "threshold": 0.0198,
+   "utility": 0.3998,
+   "precision": 0.064,
+   "recall": 0.6851,
+   "alert_rate": 0.1888,
+   "septic_patients_alerted_rate": 0.8737,
+   "non_septic_patients_alerted_rate": 0.3703
+  },
+  {
+   "threshold": 0.024,
+   "utility": 0.4014,
+   "precision": 0.0673,
+   "recall": 0.6639,
+   "alert_rate": 0.1739,
+   "septic_patients_alerted_rate": 0.8669,
+   "non_septic_patients_alerted_rate": 0.3471
+  },
+  {
+   "threshold": 0.0255,
+   "utility": 0.4014,
+   "precision": 0.0673,
+   "recall": 0.6639,
+   "alert_rate": 0.1739,
+   "septic_patients_alerted_rate": 0.8669,
+   "non_septic_patients_alerted_rate": 0.3471
+  },
+  {
+   "threshold": 0.0335,
+   "utility": 0.3959,
+   "precision": 0.0711,
+   "recall": 0.6276,
+   "alert_rate": 0.1557,
+   "septic_patients_alerted_rate": 0.8225,
+   "non_septic_patients_alerted_rate": 0.2869
+  },
+  {
+   "threshold": 0.0393,
+   "utility": 0.3611,
+   "precision": 0.0855,
+   "recall": 0.5117,
+   "alert_rate": 0.1056,
+   "septic_patients_alerted_rate": 0.7167,
+   "non_septic_patients_alerted_rate": 0.1861
+  },
+  {
+   "threshold": 0.0471,
+   "utility": 0.347,
+   "precision": 0.0881,
+   "recall": 0.4807,
+   "alert_rate": 0.0962,
+   "septic_patients_alerted_rate": 0.6655,
+   "non_septic_patients_alerted_rate": 0.1553
+  },
+  {
+   "threshold": 0.0482,
+   "utility": 0.3399,
+   "precision": 0.0926,
+   "recall": 0.4606,
+   "alert_rate": 0.0877,
+   "septic_patients_alerted_rate": 0.6382,
+   "non_septic_patients_alerted_rate": 0.1318
+  },
+  {
+   "threshold": 0.0569,
+   "utility": 0.3327,
+   "precision": 0.0936,
+   "recall": 0.4476,
+   "alert_rate": 0.0843,
+   "septic_patients_alerted_rate": 0.6212,
+   "non_septic_patients_alerted_rate": 0.1182
+  },
+  {
+   "threshold": 0.0576,
+   "utility": 0.3232,
+   "precision": 0.0973,
+   "recall": 0.4275,
+   "alert_rate": 0.0775,
+   "septic_patients_alerted_rate": 0.5939,
+   "non_septic_patients_alerted_rate": 0.0984
+  },
+  {
+   "threshold": 0.0586,
+   "utility": 0.2882,
+   "precision": 0.1096,
+   "recall": 0.3656,
+   "alert_rate": 0.0588,
+   "septic_patients_alerted_rate": 0.5051,
+   "non_septic_patients_alerted_rate": 0.0623
+  },
+  {
+   "threshold": 0.0758,
+   "utility": 0.27,
+   "precision": 0.1139,
+   "recall": 0.3372,
+   "alert_rate": 0.0522,
+   "septic_patients_alerted_rate": 0.4608,
+   "non_septic_patients_alerted_rate": 0.043
+  },
+  {
+   "threshold": 0.0807,
+   "utility": 0.27,
+   "precision": 0.1139,
+   "recall": 0.3372,
+   "alert_rate": 0.0522,
+   "septic_patients_alerted_rate": 0.4608,
+   "non_septic_patients_alerted_rate": 0.043
+  },
+  {
+   "threshold": 0.0866,
+   "utility": 0.2128,
+   "precision": 0.1303,
+   "recall": 0.2533,
+   "alert_rate": 0.0343,
+   "septic_patients_alerted_rate": 0.3959,
+   "non_septic_patients_alerted_rate": 0.0214
+  },
+  {
+   "threshold": 0.087,
+   "utility": 0.1752,
+   "precision": 0.1492,
+   "recall": 0.2033,
+   "alert_rate": 0.024,
+   "septic_patients_alerted_rate": 0.3345,
+   "non_septic_patients_alerted_rate": 0.0123
+  },
+  {
+   "threshold": 0.1083,
+   "utility": 0.1587,
+   "precision": 0.155,
+   "recall": 0.1832,
+   "alert_rate": 0.0208,
+   "septic_patients_alerted_rate": 0.3106,
+   "non_septic_patients_alerted_rate": 0.0088
+  },
+  {
+   "threshold": 0.1187,
+   "utility": 0.1457,
+   "precision": 0.1601,
+   "recall": 0.1652,
+   "alert_rate": 0.0182,
+   "septic_patients_alerted_rate": 0.2935,
+   "non_septic_patients_alerted_rate": 0.0067
+  },
+  {
+   "threshold": 0.1277,
+   "utility": 0.1379,
+   "precision": 0.1635,
+   "recall": 0.1555,
+   "alert_rate": 0.0168,
+   "septic_patients_alerted_rate": 0.2799,
+   "non_septic_patients_alerted_rate": 0.0064
+  },
+  {
+   "threshold": 0.1504,
+   "utility": 0.1226,
+   "precision": 0.1619,
+   "recall": 0.1378,
+   "alert_rate": 0.015,
+   "septic_patients_alerted_rate": 0.2662,
+   "non_septic_patients_alerted_rate": 0.0053
+  },
+  {
+   "threshold": 0.166,
+   "utility": 0.0895,
+   "precision": 0.1637,
+   "recall": 0.1004,
+   "alert_rate": 0.0108,
+   "septic_patients_alerted_rate": 0.2355,
+   "non_septic_patients_alerted_rate": 0.0029
+  }
+ ],
+ "timings_s": {
+  "features_s": 259.4,
+  "xgboost_s": 9.4,
+  "lightgbm_s": 22.5,
+  "random_forest_s": 56.5,
+  "training_rows_s": 89.7,
+  "total_s": 357.7
+ }
 }

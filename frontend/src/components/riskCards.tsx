@@ -2,7 +2,7 @@ import clsx from "clsx";
 import { BellRing, ClipboardCheck, TriangleAlert } from "lucide-react";
 import { pct, TIER_LABEL } from "../lib/format";
 import type { Meta, PatientSummary } from "../lib/types";
-import { AgreementBadge, RiskBar, RiskDelta, tierText } from "./clinical";
+import { AgreementBadge, RISK_SCALE_MAX, RiskBar, RiskDelta, tierText } from "./clinical";
 import { Badge, Card, CardHeader, Tooltip } from "./ui";
 
 export function RiskSummaryCard({
@@ -18,6 +18,8 @@ export function RiskSummaryCard({
 }) {
   const precision = meta?.pool.alert_precision;
   const inTen = precision != null ? Math.max(1, Math.round(precision * 10)) : null;
+  const missed = meta ? 1 - meta.pool.septic_patients_alerted / Math.max(1, meta.pool.septic_patients) : null;
+  const falseRate = meta ? meta.pool.non_septic_patients_alerted / Math.max(1, meta.pool.patients - meta.pool.septic_patients) : null;
   return (
     <Card
       className={clsx(
@@ -58,7 +60,7 @@ export function RiskSummaryCard({
           <RiskBar risk={s.risk} tier={s.tier} cutoff={meta?.elevated_cutoff ?? 0.08} />
           <div className="mt-1 flex justify-between text-[10px] text-faint tnum">
             <span>0%</span>
-            <span>40%</span>
+            <span>{Math.round(RISK_SCALE_MAX * 100)}%</span>
           </div>
         </div>
         <dl className="mt-3 grid grid-cols-3 gap-2 border-t border-line pt-3 text-xs">
@@ -78,12 +80,12 @@ export function RiskSummaryCard({
           </div>
           <div>
             <Tooltip
-              content={`The alert fires when the uncalibrated ensemble score is ≥ ${meta?.threshold ?? 0.75} for 2 consecutive hours (or ≥ 0.90 once).`}
+              content={`The alert fires when calibrated risk is ≥ ${pct(meta?.threshold ?? 0, 1)} for 2 consecutive hours (or much higher in a single hour).`}
             >
               <dt className="cursor-help text-faint underline decoration-dotted underline-offset-2">Alert score</dt>
             </Tooltip>
             <dd className="mt-0.5 font-medium text-ink tnum">
-              {s.raw_score.toFixed(2)} <span className="font-normal text-faint">/ {meta?.threshold ?? 0.75}</span>
+              {pct(s.risk, 1)} <span className="font-normal text-faint">/ {pct(meta?.threshold ?? 0, 1)}</span>
             </dd>
           </div>
         </dl>
@@ -93,16 +95,17 @@ export function RiskSummaryCard({
         <p className="mt-3 rounded-lg bg-subtle px-3 py-2 text-xs leading-5 text-muted">
           {s.tier === "alert" ? (
             <>
-              The precision-tuned alert has fired.
-              {inTen !== null && ` On unseen stays, about ${inTen} in 10 alert hours fell within 6 h of Sepsis-3 onset.`} Review
-              the patient; the score is a prompt, not a diagnosis.
+              The model alert has fired.
+              {inTen !== null && ` On held-out patients, about ${inTen} in 10 alert hours fell within 6 h of Sepsis-3 onset`}
+              {falseRate !== null && `, and ${pct(falseRate)} of patients who never developed sepsis were alerted at least once`}.
+              Review the patient; the score is a prompt, not a diagnosis.
             </>
           ) : s.tier === "elevated" ? (
             <>Risk is above the ICU baseline but below the alert threshold. Consider a closer look at trends and pending labs.</>
           ) : (
             <>
-              <strong className="font-semibold text-ink">Not elevated — this does not rule out sepsis.</strong> The model misses most
-              cases; rely on clinical assessment.
+              <strong className="font-semibold text-ink">Not elevated — this does not rule out sepsis.</strong> The model misses
+              {missed !== null ? ` about ${pct(missed)} of septic patients` : " some septic patients"}; rely on clinical assessment.
             </>
           )}
         </p>
