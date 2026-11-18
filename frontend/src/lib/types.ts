@@ -244,3 +244,20 @@ export interface AdminUsersResponse {
   patients: { pid: string; bed: string }[];
   me: string;
 }
+
+export interface PublicSummary {
+  pool: {
+    patients: number;
+    hours: number;
+    septic_patients: number;
+    hour_roc_auc: number;
+    hour_pr_auc: number;
+    alert_precision: number | null;
+    alert_recall: number;
+    septic_patients_alerted: number;
+    non_septic_patients_alerted: number;
+  };
+  internal: { roc_auc?: number; pr_auc?: number; brier_score?: number };
+  n_features: number;
+  base_rate: number;
+}

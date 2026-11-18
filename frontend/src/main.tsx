@@ -9,6 +9,7 @@ import { HttpError, useSession } from "./lib/api";
 import { PrefsProvider } from "./lib/prefs";
 import { AccessPage } from "./pages/AccessPage";
 import { AssessPage } from "./pages/AssessPage";
+import { LandingPage } from "./pages/landing/LandingPage";
 import { LoginPage } from "./pages/LoginPage";
 import { ModelFactsPage } from "./pages/ModelFactsPage";
 import { PatientPage } from "./pages/PatientPage";
@@ -39,7 +40,15 @@ function Splash() {
 function Root() {
   const { data: user, isLoading } = useSession();
   if (isLoading) return <Splash />;
-  if (!user) return <LoginPage />;
+  if (!user) {
+    // Signed out: the landing page explains SepsisSense; any deep link goes to sign-in.
+    return (
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="*" element={<LoginPage />} />
+      </Routes>
+    );
+  }
 
   if (user.role === "patient") {
     // Patients only ever get their own portal, whatever URL they open.

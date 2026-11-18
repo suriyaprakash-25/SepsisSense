@@ -1,11 +1,14 @@
 import clsx from "clsx";
-import { Activity, Eye, EyeOff, HeartPulse, LockKeyhole, ShieldAlert, Stethoscope } from "lucide-react";
+import { Activity, ArrowLeft, Eye, EyeOff, HeartPulse, LockKeyhole, ShieldAlert, Stethoscope } from "lucide-react";
 import { useState, type FormEvent } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "../components/ui";
 import { HttpError, useDemoAccounts, useLogin } from "../lib/api";
 
 export function LoginPage() {
   const login = useLogin();
+  const navigate = useNavigate();
+  const location = useLocation();
   const demo = useDemoAccounts();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -14,7 +17,11 @@ export function LoginPage() {
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (!username.trim() || !password) return;
-    login.mutate({ username: username.trim().toLowerCase(), password });
+    login.mutate(
+      { username: username.trim().toLowerCase(), password },
+      // Coming from the landing page's /login: go to the app home. Deep links keep their URL.
+      { onSuccess: () => location.pathname === "/login" && navigate("/", { replace: true }) },
+    );
   };
 
   const error = login.error instanceof HttpError ? login.error.message : login.error ? "Could not reach the server." : null;
@@ -78,6 +85,9 @@ export function LoginPage() {
             </span>
             <span className="text-lg font-semibold tracking-tight text-ink">SepsisSense</span>
           </div>
+          <Link to="/" className="mb-6 inline-flex items-center gap-1 text-[13px] font-medium text-muted hover:text-ink">
+            <ArrowLeft className="size-3.5" /> About SepsisSense
+          </Link>
           <h2 className="text-2xl font-semibold tracking-tight text-ink">Sign in</h2>
           <p className="mt-1 text-sm text-muted">Use the account your care team gave you.</p>
 

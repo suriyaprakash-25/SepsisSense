@@ -7,6 +7,7 @@ import type {
   DemoAccount,
   Meta,
   PatientDetail,
+  PublicSummary,
   ServerAck,
   SessionUser,
   WardResponse,
@@ -218,4 +219,13 @@ export function useAdminActions() {
       onSuccess: refresh,
     }),
   };
+}
+
+export function usePublicSummary() {
+  return useQuery({
+    queryKey: ["public-summary"],
+    queryFn: () => get<PublicSummary>("/api/public/summary"),
+    staleTime: Infinity,
+    retry: 1,
+  });
 }

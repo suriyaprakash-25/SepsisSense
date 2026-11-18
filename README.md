@@ -332,6 +332,8 @@ uvicorn api.main:app --port 8000
 ```
 Open [http://localhost:8000](http://localhost:8000). For UI development with hot reload, run `npm run dev` in `frontend/` (port 5173, proxies `/api` to port 8000).
 
+Signed-out visitors see a **landing page** that explains what SepsisSense is, how it works (4 steps), what clinicians and patients each get, the design principles, honest performance on unseen stays (fetched live from `/api/public/summary`, aggregate numbers only), privacy and safety, and an FAQ, before signing in.
+
 What clinicians get:
 - **Ward overview**: patients sorted by who needs attention first, risk with 12 h trend, vitals with H/L flags and stale-data markers, lactate recency, filter tiles (alerts, elevated, rising, vitals overdue), keyboard navigation.
 - **Patient view**: risk timeline you can scrub back through, vitals small-multiples with reference bands, labs with recency and trends, the "what is driving this score" panel (grouped TreeSHAP), Surviving Sepsis Campaign Hour-1 checklist, SIRS/qSOFA, and an alert review workflow with reasons.

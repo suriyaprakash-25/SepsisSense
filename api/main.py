@@ -227,6 +227,26 @@ def health() -> Dict[str, Any]:
     return {"ok": COHORT is not None}
 
 
+@app.get("/api/public/summary")
+def public_summary() -> Dict[str, Any]:
+    """Aggregate model performance for the public landing page. No patient-level data."""
+    c = _cohort()
+    internal = {}
+    if engine.METRICS_PATH.exists():
+        vm = json.loads(engine.METRICS_PATH.read_text(encoding="utf-8")).get("validation_metrics", {})
+        internal = {k: vm.get(k) for k in ("roc_auc", "pr_auc", "brier_score")}
+    p = c.pool_stats
+    return {
+        "pool": {k: p.get(k) for k in (
+            "patients", "hours", "septic_patients", "hour_roc_auc", "hour_pr_auc", "alert_precision",
+            "alert_recall", "septic_patients_alerted", "non_septic_patients_alerted",
+        )},
+        "internal": internal,
+        "n_features": len(c.feature_names),
+        "base_rate": round(c.base_rate, 4),
+    }
+
+
 @app.get("/api/meta")
 def meta(user: Dict[str, Any] = Depends(current_user)) -> Dict[str, Any]:
     c = _cohort()
