@@ -148,7 +148,9 @@ export interface Meta {
     calibrator_max?: number;
     training_rows_after_mining?: number;
     split?: Record<"train" | "calibration" | "test", { patients: number; septic: number }>;
-    devices?: { xgboost: string; lightgbm: string; random_forest: string };
+    devices?: { xgboost: string; lightgbm: string; random_forest?: string };
+    recipe?: string;
+    n_features?: number;
     validation_metrics?: EvalMetrics;
     test_by_set?: { A: EvalMetrics; B: EvalMetrics };
   };

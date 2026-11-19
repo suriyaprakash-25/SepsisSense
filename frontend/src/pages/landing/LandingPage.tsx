@@ -291,13 +291,13 @@ function HowItWorks() {
       icon: Database,
       title: "Reads the chart every hour",
       body: "Vital signs, blood tests, age and time in the ICU — the data already recorded at the bedside.",
-      detail: "67 inputs, including 6-hour averages and 3-hour trends",
+      detail: "185 inputs: trends, variability, testing patterns, SOFA / SIRS / NEWS scores",
     },
     {
       icon: BrainCircuit,
       title: "Estimates the risk",
-      body: "Three machine-learning models vote on each patient's chance of sepsis in roughly the next six hours.",
-      detail: "LightGBM + XGBoost + Random forest, calibrated",
+      body: "Two gradient-boosting models vote on each patient's chance of sepsis in roughly the next six hours.",
+      detail: "XGBoost + LightGBM, trained to maximise clinical utility, calibrated",
     },
     {
       icon: Sparkles,
@@ -507,28 +507,28 @@ function Principles() {
 function Evidence() {
   const { data } = usePublicSummary();
   const p = data?.pool;
-  const caught = p ? p.septic_patients_alerted / Math.max(1, p.septic_patients) : 0.63;
-  const falseRate = p ? p.non_septic_patients_alerted / Math.max(1, p.patients - p.septic_patients) : 0.125;
+  const caught = p ? p.septic_patients_alerted / Math.max(1, p.septic_patients) : 0.7;
+  const falseRate = p ? p.non_septic_patients_alerted / Math.max(1, p.patients - p.septic_patients) : 0.12;
   const metrics = [
     {
-      v: p ? `${p.septic_patients_alerted} / ${p.septic_patients}` : "368 / 587",
+      v: p ? `${p.septic_patients_alerted} / ${p.septic_patients}` : "412 / 587",
       k: `patients who developed sepsis were alerted (${pctFmt(caught)})`,
       note: `About ${Math.round(caught * 3)} in 3 cases caught; the rest are missed.`,
     },
     {
-      v: p ? `${p.non_septic_patients_alerted.toLocaleString()} / ${(p.patients - p.septic_patients).toLocaleString()}` : "932 / 7,481",
+      v: p ? `${p.non_septic_patients_alerted.toLocaleString()} / ${(p.patients - p.septic_patients).toLocaleString()}` : "897 / 7,481",
       k: `patients who never developed sepsis received at least one alert (${pctFmt(falseRate)})`,
       note: `About 1 in ${Math.round(1 / Math.max(falseRate, 0.01))} get a false alarm during their stay.`,
       warn: true,
     },
     {
-      v: p ? pctFmt(p.alert_precision) : "11%",
+      v: p ? pctFmt(p.alert_precision) : "13%",
       k: "of alert hours fell within 6 hours of sepsis onset, or after it",
       note: "An alert is a prompt to look, not a diagnosis.",
     },
     {
-      v: p ? p.hour_roc_auc.toFixed(2) : "0.83",
-      k: "ROC-AUC on held-out patients (0.80 and 0.86 in the two hospital systems)",
+      v: p ? p.hour_roc_auc.toFixed(2) : "0.86",
+      k: "ROC-AUC on held-out patients (0.83 and 0.88 in the two hospital systems)",
       note: "Good ability to rank who is at higher risk.",
     },
   ];

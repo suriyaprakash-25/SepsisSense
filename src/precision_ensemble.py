@@ -197,8 +197,8 @@ class SepsisPrecisionEnsemble(BaseEstimator, ClassifierMixin):
             X = X.reindex(columns=self.feature_names, fill_value=0.0).values
         X = np.asarray(X, dtype=np.float32)
 
-        # Clinically optimized soft-voting weights
-        weights = {"lightgbm": 0.45, "xgboost": 0.45, "random_forest": 0.10}
+        # Soft-voting weights: saved with the model when set (v3+), else the original defaults
+        weights = getattr(self, "member_weights", None) or {"lightgbm": 0.45, "xgboost": 0.45, "random_forest": 0.10}
         total_w = sum(weights.get(m, 1.0) for m in self.models)
 
         weighted_pos = np.zeros(len(X), dtype=np.float32)

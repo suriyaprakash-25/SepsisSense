@@ -44,6 +44,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 warnings.filterwarnings("ignore")
 
 import features_v2 as fv  # noqa: E402
+import features_v3 as f3  # noqa: E402
 from data_harmonization import UniversalDataHarmonizer  # noqa: E402
 
 from clinical import FEATURE_CONCEPT, concept_for, feature_label  # noqa: E402
@@ -122,6 +123,20 @@ def load_model() -> Any:
     return ens
 
 
+def model_features(ens: Any, raw: pd.DataFrame, medians: Dict[str, float]) -> pd.DataFrame:
+    """
+    Model inputs for any saved model version. features_v3 computes a superset of the
+    v2 columns; the model's own feature list picks what it was trained on. Models
+    trained on native missing values (ens.impute = False) are not imputed.
+    """
+    feats = f3.engineer(raw)
+    cols = list(ens.feature_names)
+    feats = feats[cols]
+    if getattr(ens, "impute", True):
+        feats = feats.fillna({c: medians.get(c, 0.0) for c in cols})
+    return feats.reset_index(drop=True)
+
+
 def model_score(ens: Any, X: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     raw = ens._raw_predict_proba(X)[:, 1]
     return raw, np.clip(ens.optimizer.calibrate(raw), 0.0, 1.0)
@@ -185,9 +200,9 @@ def build_cohort() -> Cohort:
     del dfs
 
     log.info("Engineering features...")
-    feats = fv.impute(fv.engineer(raw_all), medians)
     ens = load_model()
     fnames = list(ens.feature_names)
+    feats = model_features(ens, raw_all, medians)
     t = float(ens.optimizer.optimal_threshold)
     X = feats[fnames].to_numpy(dtype=np.float32)
 

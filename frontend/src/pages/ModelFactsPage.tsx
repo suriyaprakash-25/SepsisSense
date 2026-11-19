@@ -24,7 +24,10 @@ function Item({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   );
 }
 
-const V1 = { patients: 3000, unseen_roc_auc: 0.685, septic_alerted: "9 / 138" };
+const HISTORY = [
+  { v: "v1", desc: "3,000-patient subset", auc: "0.685", septic: "9 / 138" },
+  { v: "v2", desc: "all patients, 67 features", auc: "0.833", septic: "368 / 587" },
+];
 
 export function ModelFactsPage() {
   const { data: m, isLoading } = useMeta();
@@ -180,8 +183,8 @@ export function ModelFactsPage() {
           )}
 
           <p className="rounded-lg bg-subtle px-3 py-2 text-xs leading-5 text-muted">
-            Previous model (v1) was trained on {V1.patients.toLocaleString()} patients and reached ROC-AUC{" "}
-            {V1.unseen_roc_auc} on unseen stays, alerting on {V1.septic_alerted} septic patients. This model (v2) uses all{" "}
+            Earlier models, held-out ROC-AUC and septic patients alerted:{" "}
+            {HISTORY.map((h) => `${h.v} (${h.desc}) ${h.auc}, ${h.septic}`).join(" · ")}. This model uses all{" "}
             {(iv.total_patients ?? 0).toLocaleString()} patients with a 70 / 10 / 20 patient-level split
             {split ? ` (${split.train.patients.toLocaleString()} train · ${split.calibration.patients.toLocaleString()} calibration · ${split.test.patients.toLocaleString()} test)` : ""}.
           </p>
@@ -192,14 +195,30 @@ export function ModelFactsPage() {
         <Card>
           <CardHeader icon={<Cpu className="size-4" />} title="How it was trained" />
           <ul className="space-y-1.5 px-4 pb-4 text-sm text-ink">
-            <li>
-              XGBoost on {iv.devices.xgboost}, LightGBM on {iv.devices.lightgbm}, random forest on {iv.devices.random_forest};
-              soft-voting weights 0.45 / 0.45 / 0.10, isotonic calibration.
-            </li>
-            <li>
-              {iv.training_rows_after_mining?.toLocaleString()} training hours after 6 h label dilation and hard-negative
-              mining; 67 features from src/features_v2.py, missing values filled with training medians.
-            </li>
+            {iv.recipe === "v3" ? (
+              <>
+                <li>
+                  XGBoost on {iv.devices.xgboost} and LightGBM on {iv.devices.lightgbm}, equal soft-voting weights, isotonic
+                  calibration on its own patient split.
+                </li>
+                <li>
+                  {iv.n_features} features (src/features_v3.py): vital-sign trends and variability, measurement counts and
+                  recency, partial SOFA and its 24 h rise, SIRS, NEWS, BUN/creatinine. Trees use missing values natively.
+                </li>
+                <li>
+                  Utility-weighted loss: each hour is weighted by how much its prediction changes the PhysioNet utility,
+                  so the model focuses on the 12 h before to 3 h after onset. {iv.training_rows_after_mining?.toLocaleString()} training hours.
+                </li>
+              </>
+            ) : (
+              <>
+                <li>
+                  XGBoost on {iv.devices.xgboost}, LightGBM on {iv.devices.lightgbm}
+                  {iv.devices.random_forest ? `, random forest on ${iv.devices.random_forest}` : ""}; isotonic calibration.
+                </li>
+                <li>{iv.training_rows_after_mining?.toLocaleString()} training hours; missing values filled with training medians.</li>
+              </>
+            )}
           </ul>
         </Card>
       )}

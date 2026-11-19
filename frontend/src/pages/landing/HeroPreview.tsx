@@ -3,15 +3,15 @@ import { ArrowUpRight, BellRing, CircleCheck, HeartPulse, Siren } from "lucide-r
 
 /**
  * A hand-built, static preview of the product for the landing page. Values mirror
- * the demo ward on model v2 (held-out test patients; SICU-03 is the highest-risk
+ * the demo ward on model v3 (held-out test patients; SICU-03 is the highest-risk
  * alert, and its real top drivers are shown, including time in ICU).
  */
 
 const ROWS = [
-  { bed: "SICU-03", who: "69 M · Day 4", risk: 17, tier: "alert", spark: [12, 15, 15, 15, 12, 15, 15, 17, 17], hr: 89, map: 78 },
-  { bed: "MICU-14", who: "56 M · Day 3", risk: 8, tier: "alert", spark: [4, 4, 5, 8, 8, 8, 8, 9, 8], hr: 62, map: 76 },
-  { bed: "MICU-10", who: "70 M · Day 3", risk: 5, tier: "elevated", spark: [4, 4, 4, 4, 6, 6, 6, 5, 5], hr: 84, map: 60 },
-  { bed: "MICU-09", who: "58 M · Day 2", risk: 2, tier: "low", spark: [1, 1, 1, 1, 2, 2, 2, 2, 2], hr: 92, map: 106 },
+  { bed: "SICU-03", who: "69 M · Day 4", risk: 13, tier: "alert", spark: [14, 17, 14, 14, 14, 14, 14, 14, 13], hr: 89, map: 78 },
+  { bed: "MICU-10", who: "50 M · Day 4", risk: 11, tier: "alert", spark: [14, 10, 9, 11, 10, 10, 10, 13, 11], hr: 94, map: 92 },
+  { bed: "MICU-14", who: "56 M · Day 3", risk: 7, tier: "alert", spark: [7, 7, 8, 9, 9, 9, 7, 7, 7], hr: 62, map: 76 },
+  { bed: "MICU-11", who: "70 M · Day 3", risk: 4, tier: "elevated", spark: [3, 2, 2, 3, 4, 4, 6, 4, 4], hr: 84, map: 60 },
 ] as const;
 
 function Spark({ values, tier }: { values: readonly number[]; tier: string }) {
@@ -109,8 +109,8 @@ export function HeroPreview() {
         <ul className="mt-2 space-y-1.5">
           {[
             { k: "Time in ICU 74 h", w: 90 },
-            { k: "Respiratory rate 30", w: 22 },
-            { k: "WBC 30.5", w: 16 },
+            { k: "WBC 30.5, up 4.2", w: 34 },
+            { k: "Respiratory rate 30", w: 25 },
           ].map((d) => (
             <li key={d.k}>
               <div className="flex items-center justify-between text-[10px] text-muted">
@@ -142,12 +142,12 @@ export function HeroPreview() {
         <div className="mt-2.5 flex items-center gap-3">
           <div className="grid grid-cols-10 gap-[2px]">
             {Array.from({ length: 100 }, (_, i) => (
-              <span key={i} className={clsx("size-[5px] rounded-full", i < 17 ? "bg-alert" : "bg-line")} />
+              <span key={i} className={clsx("size-[5px] rounded-full", i < 13 ? "bg-alert" : "bg-line")} />
             ))}
           </div>
           <div>
             <div className="text-xl font-semibold text-ink tnum">
-              17 <span className="text-xs font-medium text-muted">in 100</span>
+              13 <span className="text-xs font-medium text-muted">in 100</span>
             </div>
             <div className="text-[10px] leading-tight text-muted">chance of sepsis in the next ~6 h</div>
           </div>

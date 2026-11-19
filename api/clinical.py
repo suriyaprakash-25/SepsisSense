@@ -70,8 +70,9 @@ FEATURE_CONCEPT: Dict[str, Dict[str, Any]] = {
     "chemistry": dict(label="Electrolytes / glucose", primary=None),
     "hematology": dict(label="Hemoglobin / hematocrit", primary="Hgb"),
     "cardiac": dict(label="Troponin", primary="TroponinI"),
-    "lab_pattern": dict(label="Recent lab testing", primary=None),
+    "lab_pattern": dict(label="Testing & charting pattern", primary=None),
     "time": dict(label="Time in ICU / hospital", primary=None),
+    "scores": dict(label="Organ-failure / early-warning scores", primary=None),
     "demographics": dict(label="Age / sex / unit", primary=None),
 }
 
@@ -111,9 +112,29 @@ FEATURE_LABELS = {
 }
 
 
+_STAT_LABELS = {
+    "n_meas": "measurements so far", "hours_since": "hours since last measured",
+    "std6": "variability over 6 h", "min12": "lowest in 12 h", "max12": "highest in 12 h", "mean12": "12 h average",
+    "diff1": "change over 1 h", "diff6": "change over 6 h", "dev_mean": "vs. patient's own average",
+    "delta_prev": "change since previous result",
+}
+_SCORE_LABELS = {
+    "partial_sofa": "Partial SOFA (platelets, bilirubin, MAP, creatinine)",
+    "partial_sofa_rise24": "Partial SOFA rise over 24 h",
+    "sirs": "SIRS criteria met", "news": "NEWS-style early-warning score", "bun_cr": "BUN / creatinine ratio",
+}
+
+
 def concept_for(feature: str) -> str:
     if feature in _EXPLICIT:
         return _EXPLICIT[feature]
+    if "__" in feature:  # v3 features: "<variable>__<stat>" or "score__<name>"
+        base, stat = feature.split("__", 1)
+        if base == "score":
+            return "scores"
+        if stat in ("n_meas", "hours_since"):
+            return "lab_pattern"
+        return _EXPLICIT.get(base, "chemistry")
     if feature.endswith("_measured_mask") or feature.endswith("_hours_since_meas") or feature == "diagnostic_intensity_6h":
         return "lab_pattern"
     return "chemistry"
@@ -122,6 +143,12 @@ def concept_for(feature: str) -> str:
 def feature_label(feature: str) -> str:
     if feature in FEATURE_LABELS:
         return FEATURE_LABELS[feature]
+    if "__" in feature:
+        base, stat = feature.split("__", 1)
+        if base == "score":
+            return _SCORE_LABELS.get(stat, stat)
+        name = MEASUREMENTS.get(base, {}).get("short") or MEASUREMENTS.get(base, {}).get("label", base)
+        return f"{name}: {_STAT_LABELS.get(stat, stat)}"
     if feature.endswith("_measured_mask"):
         base = feature.replace("_measured_mask", "")
         return f"{MEASUREMENTS.get(base, {}).get('label', base)} drawn this hour (1 = yes)"

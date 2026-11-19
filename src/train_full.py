@@ -56,6 +56,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 import features_v2 as fv  # noqa: E402
+import features_v3 as f3  # noqa: E402
 from data_harmonization import UniversalDataHarmonizer  # noqa: E402
 from precision_ensemble import SepsisPrecisionEnsemble  # noqa: E402
 
@@ -163,7 +164,16 @@ def evaluate(y: np.ndarray, risk: np.ndarray, patients: np.ndarray, threshold: f
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--device", choices=["gpu", "cpu"], default="gpu")
-    ap.add_argument("--neg-ratio", type=float, default=6.0)
+    ap.add_argument("--neg-ratio", type=float, default=6.0, help="v2 recipe only")
+    ap.add_argument("--recipe", choices=["v3", "v2"], default="v3",
+                    help="v3: 185 features, native missing values, utility-weighted loss, tuned XGBoost + LightGBM "
+                         "(chosen in src/experiments_v3.py). v2: previous recipe.")
+    ap.add_argument("--xgb-trees", type=int, default=760, help="chosen in experiments_v3.py sweep (664 at 85%% data, x1.15)")
+    ap.add_argument("--xgb-depth", type=int, default=4)
+    ap.add_argument("--lgb-trees", type=int, default=210, help="chosen in experiments_v3.py sweep (183 at 85%% data, x1.15)")
+    ap.add_argument("--lgb-leaves", type=int, default=127)
+    ap.add_argument("--lgb-min-child", type=int, default=100)
+    ap.add_argument("--xgb-weight", type=float, default=0.5, help="Soft-voting weight of XGBoost (LightGBM gets the rest)")
     ap.add_argument("--max-non-septic-alert-rate", type=float, default=0.15,
                     help="Alarm-burden cap: at most this share of non-septic calibration patients may be alerted "
                          "(threshold = best PhysioNet utility under the cap; 1.0 = pure utility maximum)")
@@ -186,7 +196,7 @@ def main() -> None:
     feat_parts, info_parts, rawmax_parts = [], [], []
     for i in range(0, len(stays), CHUNK):
         raw = harmonizer.harmonize_dataframe(load_chunk(stays[i:i + CHUNK]), source_name="PhysioNet")
-        feat_parts.append(fv.engineer(raw))
+        feat_parts.append((f3 if args.recipe == "v3" else fv).engineer(raw))
         info_parts.append(pd.DataFrame({
             "Patient": raw["Patient"].to_numpy(),
             "Set": raw["DatasetSource"].to_numpy(),
@@ -219,56 +229,88 @@ def main() -> None:
 
     # ---- 3. impute with training medians ----
     is_train = (info["role"] == "train").to_numpy()
-    medians = fv.compute_medians(feats.loc[is_train])
-    feats = fv.impute(feats, medians)
+    feature_names = list(feats.columns)
+    medians = {c: (float(v) if np.isfinite(v) else 0.0)
+               for c, v in zip(feature_names, np.nanmedian(feats.loc[is_train].to_numpy(np.float64), axis=0))}
+    impute = args.recipe == "v2"
+    if impute:  # v3 lets the trees use missing values natively (medians still saved for reference)
+        feats = feats.fillna(medians)
 
     # ---- 4. training rows: dilation + mining ----
     t0 = time.time()
     tr_info = info.loc[is_train].reset_index(drop=True)
     X_tr_all = feats.loc[is_train].to_numpy(dtype=np.float32)
-    y_tr_all = dilate_labels(tr_info["y"].to_numpy(), tr_info["Patient"].to_numpy(), hours=6)
-    keep_p = mine_patients(meta.loc[split["train"]], raw_max, args.neg_ratio, args.seed)
-    keep = tr_info["Patient"].isin(keep_p).to_numpy()
-    X_tr, y_tr = X_tr_all[keep], y_tr_all[keep]
-    del X_tr_all, y_tr_all
+    w_tr = None
+    if args.recipe == "v3":
+        # Utility-weighted loss (Hammoud et al. 2019): label = utility-optimal action, weight = |U(1) - U(0)|.
+        u_pos, u_neg, _, _ = fv.utility_terms(tr_info["y"].to_numpy(), tr_info["Patient"].to_numpy())
+        X_tr = X_tr_all
+        y_tr = (u_pos > u_neg).astype(np.int8)
+        w_tr = np.abs(u_pos - u_neg).astype(np.float32)
+        spw = 1.0
+        log.info("Utility-weighted training: %s rows, %s positive targets, weight range %.2f-%.2f",
+                 f"{len(y_tr):,}", f"{int(y_tr.sum()):,}", float(w_tr.min()), float(w_tr.max()))
+    else:
+        y_tr_all = dilate_labels(tr_info["y"].to_numpy(), tr_info["Patient"].to_numpy(), hours=6)
+        keep_p = mine_patients(meta.loc[split["train"]], raw_max, args.neg_ratio, args.seed)
+        keep = tr_info["Patient"].isin(keep_p).to_numpy()
+        X_tr, y_tr = X_tr_all[keep], y_tr_all[keep]
+        del y_tr_all
+        spw = min(int((y_tr == 0).sum()) / max(int(y_tr.sum()), 1), 6.0)
+        log.info("Training rows after mining: %s (%s positive, scale_pos_weight %.2f)", f"{len(y_tr):,}", f"{int(y_tr.sum()):,}", spw)
     gc.collect()
     pos, neg = int(y_tr.sum()), int(len(y_tr) - y_tr.sum())
-    spw = min(neg / max(pos, 1), 6.0)
-    log.info("Training rows after mining: %s (%s positive, scale_pos_weight %.2f)", f"{len(y_tr):,}", f"{pos:,}", spw)
 
     # ---- 5. fit models ----
     gpu = args.device == "gpu"
     models = {}
     t1 = time.time()
+    if args.recipe == "v3":
+        xgb_params = dict(n_estimators=args.xgb_trees, learning_rate=0.03, max_depth=args.xgb_depth, min_child_weight=20,
+                          subsample=0.8, colsample_bytree=0.6, reg_lambda=2.0)
+    else:
+        xgb_params = dict(n_estimators=300, max_depth=5, learning_rate=0.05, subsample=0.85, colsample_bytree=0.85,
+                          scale_pos_weight=spw)
     models["xgboost"] = xgb.XGBClassifier(
-        n_estimators=300, max_depth=5, learning_rate=0.05, subsample=0.85, colsample_bytree=0.85,
-        scale_pos_weight=spw, eval_metric="aucpr", tree_method="hist", device="cuda" if gpu else "cpu",
-        random_state=args.seed, n_jobs=-1, verbosity=0,
-    ).fit(X_tr, y_tr)
+        **xgb_params, tree_method="hist", device="cuda" if gpu else "cpu", random_state=args.seed, n_jobs=-1, verbosity=0,
+    ).fit(X_tr, y_tr, sample_weight=w_tr)
     timings["xgboost_s"] = round(time.time() - t1, 1)
     log.info("  XGBoost (%s) trained in %.1fs", "CUDA" if gpu else "CPU", timings["xgboost_s"])
 
     t1 = time.time()
-    lgb_params = dict(n_estimators=300, max_depth=6, num_leaves=31, learning_rate=0.05, subsample=0.85,
-                      subsample_freq=1, colsample_bytree=0.85, scale_pos_weight=spw, random_state=args.seed,
-                      n_jobs=-1, verbosity=-1)
-    try:
-        models["lightgbm"] = lgb.LGBMClassifier(device="gpu" if gpu else "cpu", **lgb_params).fit(X_tr, y_tr)
-        lgb_device = "GPU" if gpu else "CPU"
-    except Exception as e:  # OpenCL GPU unavailable: fall back cleanly
-        log.warning("  LightGBM GPU failed (%s); using CPU", e)
-        models["lightgbm"] = lgb.LGBMClassifier(device="cpu", **lgb_params).fit(X_tr, y_tr)
-        lgb_device = "CPU (GPU fallback)"
+    if args.recipe == "v3":
+        lgb_params = dict(n_estimators=args.lgb_trees, learning_rate=0.03, num_leaves=args.lgb_leaves,
+                          min_child_samples=args.lgb_min_child, subsample=0.8, subsample_freq=1, colsample_bytree=0.6,
+                          reg_lambda=2.0, random_state=args.seed, n_jobs=-1, verbosity=-1)
+        lgb_try = ["cpu"]  # CPU histogram LightGBM matched the experiments and is fast on 12 threads
+    else:
+        lgb_params = dict(n_estimators=300, max_depth=6, num_leaves=31, learning_rate=0.05, subsample=0.85,
+                          subsample_freq=1, colsample_bytree=0.85, scale_pos_weight=spw, random_state=args.seed,
+                          n_jobs=-1, verbosity=-1)
+        lgb_try = ["gpu", "cpu"] if gpu else ["cpu"]
+    lgb_device = None
+    for dev in lgb_try:
+        try:
+            models["lightgbm"] = lgb.LGBMClassifier(device=dev, **lgb_params).fit(X_tr, y_tr, sample_weight=w_tr)
+            lgb_device = dev.upper()
+            break
+        except Exception as e:  # OpenCL GPU unavailable: fall back cleanly
+            log.warning("  LightGBM %s failed (%s)", dev, e)
     timings["lightgbm_s"] = round(time.time() - t1, 1)
     log.info("  LightGBM (%s) trained in %.1fs", lgb_device, timings["lightgbm_s"])
 
-    t1 = time.time()
-    models["random_forest"] = RandomForestClassifier(
-        n_estimators=80, max_depth=8, max_features="sqrt", class_weight="balanced_subsample",
-        random_state=args.seed, n_jobs=6,
-    ).fit(X_tr, y_tr)
-    timings["random_forest_s"] = round(time.time() - t1, 1)
-    log.info("  Random forest (CPU) trained in %.1fs", timings["random_forest_s"])
+    if args.recipe == "v2":
+        t1 = time.time()
+        models["random_forest"] = RandomForestClassifier(
+            n_estimators=80, max_depth=8, max_features="sqrt", class_weight="balanced_subsample",
+            random_state=args.seed, n_jobs=6,
+        ).fit(X_tr, y_tr)
+        timings["random_forest_s"] = round(time.time() - t1, 1)
+        log.info("  Random forest (CPU) trained in %.1fs", timings["random_forest_s"])
+        WEIGHTS.update({"lightgbm": 0.45, "xgboost": 0.45, "random_forest": 0.10})
+    else:
+        WEIGHTS.clear()
+        WEIGHTS.update({"xgboost": args.xgb_weight, "lightgbm": 1.0 - args.xgb_weight})
     if gpu:  # predict on CPU later so the web app never needs CUDA
         models["xgboost"].set_params(device="cpu")
     del X_tr, y_tr
@@ -350,13 +392,16 @@ def main() -> None:
 
     ens = SepsisPrecisionEnsemble(target_precision=0.0, random_state=args.seed)
     ens.models = models
-    ens.feature_names = list(fv.FEATURES)
+    ens.feature_names = feature_names
+    ens.member_weights = dict(WEIGHTS)
+    ens.impute = impute
+    ens.recipe = args.recipe
     ens.optimizer.calibrator = iso
     ens.optimizer.optimal_threshold = threshold
     ens.optimal_threshold = threshold
     ens.is_fitted = True
     joblib.dump(ens, out / "sepsissense_precision_ensemble.pkl", compress=3)
-    joblib.dump(list(fv.FEATURES), out / "precision_feature_columns.pkl")
+    joblib.dump(feature_names, out / "precision_feature_columns.pkl")
     (out / "feature_medians.json").write_text(json.dumps(medians, indent=1), encoding="utf-8")
     (out / "data_split.json").write_text(json.dumps(split), encoding="utf-8")
 
@@ -377,7 +422,12 @@ def main() -> None:
         "sepsis_patients": int(meta["septic"].sum()),
         "split": {r: {"patients": len(split[r]), "septic": int(meta.loc[split[r], "septic"].sum())} for r in split},
         "training_rows_after_mining": int(pos + neg),
-        "devices": {"xgboost": "CUDA" if gpu else "CPU", "lightgbm": lgb_device, "random_forest": "CPU"},
+        "recipe": args.recipe,
+        "n_features": len(feature_names),
+        "member_weights": dict(WEIGHTS),
+        "hyperparameters": {"xgboost": xgb_params, "lightgbm": {k: v for k, v in lgb_params.items() if k not in ("verbosity", "n_jobs")}},
+        "devices": {"xgboost": "CUDA" if gpu else "CPU", "lightgbm": lgb_device,
+                    **({"random_forest": "CPU"} if "random_forest" in models else {})},
         "threshold": {
             "value": threshold,
             "scale": "calibrated probability",

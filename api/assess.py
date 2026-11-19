@@ -62,7 +62,7 @@ class Assessor:
                    threshold=float(ens.optimizer.optimal_threshold))
 
     def score(self, raw: pd.DataFrame) -> Dict[str, Any]:
-        feats = fv.impute(fv.engineer(raw), self.medians)
+        feats = engine.model_features(self.ens, raw, self.medians)
         X = feats[self.feature_names].to_numpy(dtype=np.float32)
         raw_score, risk = engine.model_score(self.ens, X)
         return {

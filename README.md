@@ -19,6 +19,7 @@ The project focuses on **clinician alarm fatigue**: it prioritises specificity a
 - [System Architecture](#-system-architecture)
 - [Research Modules](#-research-modules)
 - [Validated Results](#-validated-results-held-out-physionet-2019)
+- [Model improvement research](#-model-improvement-research)
 - [Limitations & Honest Assessment](#-limitations--honest-assessment)
 - [Project Directory Structure](#-project-directory-structure)
 - [Multimodal Bedside Clinical UI](#-multimodal-bedside-clinical-ui)
@@ -33,7 +34,7 @@ The project focuses on **clinician alarm fatigue**: it prioritises specificity a
 
 Status key: ✅ trained & evaluated on real PhysioNet data · 🧪 implemented & unit-tested, demonstrated on synthetic/simulated data only
 
-1. ✅ **Ensemble trained on all 40,336 PhysioNet patients (GPU)**: LightGBM + XGBoost + Random Forest soft-voting ensemble with isotonic calibration. **ROC-AUC 0.833 on 8,068 held-out patients**; the alert catches 63% of septic patients while alerting 12.5% of non-septic patients (see [results](#-validated-results-held-out-physionet-2019)).
+1. ✅ **Research-informed ensemble trained on all 40,336 PhysioNet patients (GPU)**: tuned XGBoost + LightGBM on 185 features with a utility-weighted loss and isotonic calibration. **ROC-AUC 0.858 on 8,068 held-out patients**; the alert catches 70% of septic patients while alerting 12% of non-septic patients (see [results](#-validated-results-held-out-physionet-2019) and [research](#-model-improvement-research)).
 2. ✅ **Early-warning labelling**: 6-hour backward label dilation, so the model is trained to flag the hours *before* Sepsis-3 onset.
 3. ✅ **Imbalance handling**: trajectory-preserving hard negative mining keeps all septic and non-septic SIRS ("look-alike") patients.
 4. ✅ **Missingness-as-signal features**: lab-ordering patterns used as a proxy for clinical suspicion.
@@ -146,91 +147,130 @@ flowchart TD
 
 ## 📊 Validated Results (held-out PhysioNet 2019)
 
-**Model v2** is trained on **all 40,336 patients** in the PhysioNet/CinC 2019 training data (sets A and B) with [`src/train_full.py`](src/train_full.py), on an NVIDIA RTX 4050 laptop GPU (XGBoost on CUDA, LightGBM on GPU; the full run takes about 6 minutes, most of it feature engineering).
+**Model v3** is trained on **all 40,336 patients** in the PhysioNet/CinC 2019 training data with [`src/train_full.py`](src/train_full.py) on an NVIDIA RTX 4050 laptop GPU (XGBoost on CUDA; the full run takes under 5 minutes, most of it feature engineering). Its recipe was chosen by the literature review and controlled experiments described in [Model improvement research](#-model-improvement-research) below.
 
-**Patient-level split** (stratified by hospital system and sepsis status): **70% train** (28,235 patients, 2,052 septic) · **10% calibration** (4,033, 293 septic) · **20% held-out test** (8,068, 587 septic). Test patients are never used for fitting, calibration or choosing the threshold; the web app replays only these patients.
+**Patient-level split** (stratified by hospital system and sepsis status): **70% train** (28,235 patients, 2,052 septic) · **10% calibration** (4,033, 293 septic) · **20% held-out test** (8,068, 587 septic). Test patients are never used for fitting, model selection, calibration or choosing the threshold; the web app replays only these patients.
 
-**Alert rule**: calibrated risk ≥ **4.82%** for two consecutive hours (causal persistence filter). The threshold was chosen on the calibration split as the best official PhysioNet 2019 utility that alerts at most **15% of non-septic patients**, a cap that limits alarm burden.
+**Alert rule**: calibrated risk ≥ **6.06%** for two consecutive hours (causal persistence filter). The threshold was chosen on the calibration split as the best official PhysioNet 2019 utility that alerts at most **15% of non-septic patients**, a cap that limits alarm burden.
 
 ### Held-out test split: 8,068 patients
 
 Source: [`models/precision_metrics.json`](models/precision_metrics.json); the web app recomputes the same numbers live (Model facts page and `/api/public/summary`).
 
-| Metric | Value | Notes |
-|:---|:---:|:---|
-| ROC-AUC | **0.833** | Hour-level discrimination |
-| PR-AUC | **0.114** | About 6.3× the 0.018 positive-hour rate |
-| Brier score | **0.0169** | Calibration error after isotonic regression |
-| PhysioNet 2019 normalised utility | **0.359** | 0 = never alert, 1 = perfect. The 2019 challenge winner scored about 0.36 on the hidden test set (not directly comparable) |
-| Septic patients with ≥ 1 alert | **368 / 587 (63%)** | Patient level |
-| Non-septic patients with ≥ 1 alert | **932 / 7,481 (12.5%)** | Patient level; the price of catching more cases |
-| Precision (PPV) of alert hours | **11.2%** | 2,546 TP / 22,782 alert hours |
-| Recall of positive hours | **45.4%** | 2,546 / 5,607 |
-| Specificity (hours) | **93.3%** | |
+| Metric | v2 | **v3** | Notes |
+|:---|:---:|:---:|:---|
+| ROC-AUC | 0.833 | **0.858** | Hour-level discrimination |
+| PR-AUC | 0.114 | **0.141** | +24%; about 7.8× the 0.018 positive-hour rate |
+| Brier score | 0.0169 | **0.0165** | Calibration error after isotonic regression |
+| PhysioNet 2019 normalised utility | 0.359 | **0.392** | 0 = never alert, 1 = perfect. The 2019 challenge winner scored about 0.36 on the hidden test set (not directly comparable) |
+| **Recall**: septic patients with ≥ 1 alert | 368 / 587 (62.7%) | **412 / 587 (70.2%)** | 44 more septic patients caught |
+| Non-septic patients with ≥ 1 alert | 932 / 7,481 (12.5%) | **897 / 7,481 (12.0%)** | 35 fewer false alarms |
+| **Precision** (PPV) of alert hours | 11.2% | **12.9%** | 2,682 TP / 20,722 alert hours |
+| Recall of positive hours | 45.4% | **47.8%** | 2,682 / 5,607 |
+| Specificity (hours) | 93.3% | **94.1%** | |
+| Hour-level accuracy | 92.4% | **93.2%** | Dominated by the 98% of negative hours, so not a useful headline metric |
 
-**Confusion matrix (hours)**: TN 282,827 · FP 20,236 · FN 3,061 · TP 2,546
+**Confusion matrix (hours, v3)**: TN 285,023 · FP 18,040 · FN 2,925 · TP 2,682
 
-**By hospital system** (held-out test):
+**By hospital system** (held-out test, v3):
 
 | | Set A | Set B |
 |:---|:---:|:---:|
 | Patients (septic) | 4,067 (358) | 4,001 (229) |
-| ROC-AUC | 0.803 | 0.862 |
-| PR-AUC | 0.112 | 0.117 |
-| PhysioNet utility | 0.358 | 0.361 |
-| Septic patients alerted | 227 / 358 | 141 / 229 |
-| Non-septic patients alerted | 642 / 3,709 | 290 / 3,772 |
+| ROC-AUC | 0.833 (v2 0.803) | 0.883 (v2 0.862) |
+| PR-AUC | 0.131 (v2 0.112) | 0.161 (v2 0.117) |
+| PhysioNet utility | 0.397 (v2 0.358) | 0.385 (v2 0.361) |
+| Septic patients alerted | 251 / 358 | 161 / 229 |
+| Non-septic patients alerted | 579 / 3,709 | 318 / 3,772 |
 
-**Other operating points** (chosen on calibration, measured on test): the pure utility maximum (threshold 2.4%) catches about 86% of septic patients but alerts on about 33% of non-septic patients; a strict cap of 5% non-septic alerts catches only about 31% of septic patients. The 15% cap was chosen as the balance between missed cases and alarm fatigue.
+**Other operating point**: the pure utility maximum (threshold 2.6%) reaches a calibration utility of 0.446 but alerts many more non-septic patients; the 15% cap keeps alarm burden at about 1 in 8 patients.
 
-### Before and after
+### Model history
 
-| | v1 (3,000-patient subset) | **v2 (all 40,336 patients)** |
-|:---|:---:|:---:|
-| Patients used to fit | ~2,400 | 28,235 |
-| Held-out evaluation | 1,500 unseen stays | 8,068 held-out patients |
-| ROC-AUC (held-out) | 0.685 | **0.833** |
-| Septic patients alerted | 9 / 138 (6.5%) | **368 / 587 (63%)** |
-| Non-septic patients alerted | 0 / 1,362 | 932 / 7,481 (12.5%) |
-| PhysioNet utility | −0.73 (internal split) | **0.359** |
-| Threshold | 0.75 on raw score (never fired on calibrated scale) | 4.82% on calibrated risk, chosen and applied on one scale |
+| | v1 | v2 | **v3** |
+|:---|:---:|:---:|:---:|
+| Training data | 3,000-patient subset | all 40,336 | all 40,336 |
+| Features | 67 | 67 | **185** |
+| Loss | class-weighted | class-weighted | **utility-weighted** |
+| Models | XGB + LGB + RF | XGB + LGB + RF | **XGB + LGB (tuned)** |
+| Held-out ROC-AUC | 0.685 (1,500 stays) | 0.833 | **0.858** |
+| Septic patients alerted | 9 / 138 (6.5%) | 368 / 587 (62.7%) | **412 / 587 (70.2%)** |
+| PhysioNet utility | −0.73 (internal split) | 0.359 | **0.392** |
 
-v1 is kept in `models/v1_backup/` (git-ignored); its training script is `src/train_precision_model.py`.
-
-**What changed besides more data** (see [`src/features_v2.py`](src/features_v2.py) and [`src/train_full.py`](src/train_full.py)):
-- The threshold is chosen and applied on the **same calibrated scale**, using the official PhysioNet utility instead of a precision target.
-- **Causal** persistence filter (current and previous hour only).
-- Lab-availability features are computed **before** forward fill, so "lactate drawn this hour" now means exactly that.
-- Missing values are filled with **training-split medians**, saved and reused at inference, so the ward, manual assessments and training see identical inputs.
-- Calibration has its **own patient split**; the test split is untouched until the final report.
+Older models are kept in `models/v1_backup/` and `models/v2_backup/` (git-ignored); `python src/train_full.py --recipe v2` reproduces v2.
 
 ### What this means
 
-- **Much better at finding sepsis**: ROC-AUC rose from 0.69 to 0.83 on held-out patients, and the alert now catches about 2 in 3 septic patients instead of 1 in 15.
-- **The cost is false alarms**: about 1 in 8 patients who never develop sepsis receive at least one alert, and only about 1 in 9 alert hours fall within 6 hours of onset. An alert is a prompt to review, not a diagnosis.
-- **A quiet tool is still not reassurance**: about a third of septic patients are never alerted.
+- **Better on both fronts**: compared with v2, v3 catches 44 more septic patients *and* raises 35 fewer false alarms on the same held-out patients.
+- **The cost is still false alarms**: about 1 in 8 patients who never develop sepsis receive at least one alert, and about 1 in 8 alert hours fall within 6 hours of onset. An alert is a prompt to review, not a diagnosis.
+- **A quiet tool is still not reassurance**: about 3 in 10 septic patients are never alerted.
 
 > ⚠️ `demo_output/demo_results.json` reports AUC ≈ 0.9998. That run uses the **synthetic** cohort from `src/preprocess.py` and does not reflect real-world performance.
 
 ---
 
+## 🔬 Model improvement research
+
+The v3 recipe came from a review of the PhysioNet/CinC 2019 literature, turned into controlled experiments ([`src/experiments_v3.py`](src/experiments_v3.py), results in [`models/experiments_v3.json`](models/experiments_v3.json)).
+
+**What the literature suggested**
+
+| Technique | Evidence |
+|:---|:---|
+| Measurement-process features (missingness, counts, recency), vital deltas and variance | Du et al. (2nd place, utility 0.345): 40 variables + 34 missingness flags + deltas + variance; Yang et al.: 168 features from missingness, clinical scores and time series |
+| Partial SOFA, BUN/creatinine, rolling min/max | Morrill et al. (Oxford, 1st place): signatures over PartialSOFA, BUN/Cr and MAP, 6 h min/max look-back |
+| Utility-weighted loss | Hammoud et al.: the challenge utility is maximised by a weighted 0-1 loss; weight each hour by \|U(1) − U(0)\| |
+| Tuned gradient boosting | Most top-5 entries were tuned boosted trees (Bayesian or cross-validated tuning) |
+| Check another hospital | All top-5 teams scored negative utility on the organisers' hidden third hospital |
+
+**Protocol**: training patients were split again 85 / 15 into inner-train and inner-validation; every variant was compared on inner-validation only. Calibration and test patients were not touched until the final model.
+
+**Inner-validation results** (4,236 patients):
+
+| Variant | ROC-AUC | PR-AUC | Utility @ ≤15% cap | Septic alerted |
+|:---|:---:|:---:|:---:|:---:|
+| E0 v2 recipe | 0.821 | 0.111 | 0.346 | 65.6% |
+| E1 + 118 new features (185) | 0.834 | 0.121 | 0.356 | 65.3% |
+| E2 + native missing values, no RF | 0.836 | 0.117 | 0.356 | 67.5% |
+| E3 + tuned boosting, early stopping | 0.833 | 0.136 | 0.368 | 68.5% |
+| E4 + utility-weighted loss | 0.840 | 0.148 | 0.369 | 68.5% |
+| E5 = E3 without ICULOS / HospAdmTime | 0.827 | 0.144 | 0.349 | 66.6% |
+| E6 tuned E4 (XGB depth 4 + LGB 127 leaves) | 0.845 | 0.147 | 0.361 | 68.5% |
+
+E3/E5 early-stopped on PR-AUC, which halted LightGBM after 2 trees; E6 re-tuned E4 with ROC-AUC early stopping and longer patience. Removing the time-in-hospital features (E5) cost 0.006 ROC-AUC and 0.02 utility.
+
+**Cross-hospital generalisation** (train on one hospital system's training patients, test on the *other* system's held-out patients):
+
+| | ROC-AUC v2 → v3 | PR-AUC v2 → v3 | Utility @ cap v2 → v3 |
+|:---|:---:|:---:|:---:|
+| Train A → test B | 0.768 → 0.775 | 0.064 → 0.082 | 0.267 → 0.261 |
+| Train B → test A | 0.750 → 0.769 | 0.087 → 0.090 | 0.213 → 0.135 |
+
+Both recipes lose about 0.09 ROC-AUC at a hospital they have never seen. v3 still ranks patients better, but its alert utility transfers worse from B to A, so calibration and threshold must be re-tuned at any new site before use.
+
+**Sources**: [PhysioNet 2019 challenge papers](https://physionet.org/content/challenge-2019/1.0.0/papers/index.html) · [Morrill et al., signature-based model](https://www.cinc.org/2019/Program/accepted/14.html) · [Hammoud et al., optimal sample weighting](https://aminer.org/pub/5e5e196293d709897ce693ef/early-prediction-of-sepsis-using-gradient-boosting-decision-trees-with-optimal-sample) · [Reyna et al., analysis of the challenge (top teams on the hidden hospital)](https://arxiv.org/pdf/2012.11013) · [Yang et al., multi-feature fusion XGBoost](https://alpha.physionet.org/files/challenge-2019/1.0.0/papers/CinC2019-020.pdf?download)
+
+---
+
 ## 🧭 Limitations & Honest Assessment
 
-- **Single dataset**: both test sets come from PhysioNet 2019 (two US hospital systems), so this is not true external validation (e.g. MIMIC-IV / eICU). Set B scores higher than set A (ROC-AUC 0.86 vs 0.80), so performance varies by hospital.
-- **Shortcut learning on length of stay remains**: in the manual assessment, the same deteriorating vitals score 8.1% at ICU hour 30 and 16.6% at hour 120, and time in ICU is often a top driver, because longer PhysioNet stays carry more sepsis labels. The alert still fires at every ICU hour for that example, but a fair model should be retrained without `ICULOS`/`HospAdmTime` (or with them controlled for) and the effect re-measured.
-- **Lead time is hard to read**: alerted septic patients were first flagged a median of 28.5 h before onset, but many of these first alerts fire well before the 12-hour window the utility rewards, so they count as false positives.
+- **Single dataset, weak cross-site transfer**: both test sets come from PhysioNet 2019 (two US hospital systems). Trained on one system and tested on the other, ROC-AUC falls to about 0.77. External validation (e.g. MIMIC-IV / eICU) and per-site calibration are needed before any real use.
+- **Length-of-stay shortcut is weaker but not gone**: in the manual assessment, the same deteriorating vitals score 10.7% at ICU hour 30 and 12.7% at hour 120 (v2: 8.1% vs 16.6%; v1: 4.8% vs 27.6%). In ward replays, time in ICU and cumulative measurement counts (which also grow with length of stay) can still be top drivers. Next experiment: replace cumulative counts with counts over the last 24 h, and retrain without `ICULOS`/`HospAdmTime`.
+- **Lead time is hard to read**: alerted septic patients were first flagged a median of 22 h before onset, but many first alerts fire before the 12-hour window the utility rewards, so they count as false positives.
 - **Hour-level labels**: the 6 h pre-onset window is labelled positive, so alerts long before onset count against the model.
-- **Prototype modules are not in the trained pipeline**: conformal gating, signatures, NLP, waveforms, federated learning and RL are tested on synthetic inputs only (see status markers above). Conformal prediction has not been re-calibrated for v2.
+- **Prototype modules are not in the trained pipeline**: conformal gating, signatures, NLP, waveforms, federated learning and RL are tested on synthetic inputs only (see status markers above). Conformal prediction has not been re-calibrated for the current model.
 - **No subgroup / fairness analysis**, no prospective or silent-mode evaluation.
-- **Next steps**: retrain without length-of-stay features; external validation on MIMIC-IV; subgroup analysis by age, sex and unit; sequence models for irregular time series (e.g. GRU-D) as a comparison; re-calibrate conformal prediction on the calibration split.
+- **Next steps**: the length-of-stay ablations above; external validation on MIMIC-IV; subgroup analysis by age, sex and unit; signature features (as in the winning entry) and sequence models (e.g. GRU-D) as comparisons.
 
 ### Retraining
 
 ```bash
 # all 40,336 patients; needs the full PhysioNet 2019 training data under physionet.org/ (see DATA_DOWNLOAD.md)
-python src/train_full.py                                  # GPU (CUDA XGBoost, GPU LightGBM)
+python src/train_full.py                                  # v3 recipe on GPU (CUDA XGBoost)
 python src/train_full.py --device cpu                     # no GPU
+python src/train_full.py --recipe v2                      # previous recipe
 python src/train_full.py --max-non-septic-alert-rate 1.0  # pure PhysioNet-utility threshold, no alarm cap
+python src/experiments_v3.py                              # re-run the research experiments (E0-E5); SWEEP / CROSS for E6 / E7
 ```
 
 The web app rebuilds its ward automatically when the model file is newer than its cache.
@@ -379,7 +419,7 @@ How access is enforced (server side, standard library only):
 - State-changing requests require an `X-SepsisSense` header (CSRF protection), and 5 failed sign-ins lock an account for 60 s.
 - Accounts, alert reviews and the replay clock are stored in `api/.data/` (git-ignored). Set `SEPSISSENSE_SECRET` to supply your own signing key; otherwise one is generated there.
 
-Design notes: low risk is shown in neutral grey, never green, because the model still misses about a third of septic patients; red and amber are reserved for alerts and abnormal values. The API scores with the same feature code and training medians as training, applies the alert threshold on the calibrated scale it was chosen on, uses a causal persistence filter, and reports held-out metrics live; see the Model facts page.
+Design notes: low risk is shown in neutral grey, never green, because the model still misses about 3 in 10 septic patients; red and amber are reserved for alerts and abnormal values. The API scores with the same feature code and training medians as training, applies the alert threshold on the calibrated scale it was chosen on, uses a causal persistence filter, and reports held-out metrics live; see the Model facts page.
 
 ### 5. Legacy Streamlit app
 ```bash
