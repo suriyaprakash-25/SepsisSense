@@ -87,3 +87,4 @@ models/v1_backup/
 data/processed/features_v3/
 *.npy
 models/v2_backup/
+catboost_info/

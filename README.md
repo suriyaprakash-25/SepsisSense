@@ -199,6 +199,8 @@ Source: [`models/precision_metrics.json`](models/precision_metrics.json); the we
 
 Older models are kept in `models/v1_backup/` and `models/v2_backup/` (git-ignored); `python src/train_full.py --recipe v2` reproduces v2.
 
+After v3, signature features, seed bagging, CatBoost, Optuna tuning, model ensembles, per-hospital thresholds and five alert-rule variants were also tested; none improved precision and recall together beyond noise, so v3 remains the deployed model (see [Every model test at a glance](#every-model-test-at-a-glance)).
+
 ### What this means
 
 - **Better on both fronts**: compared with v2, v3 catches 44 more septic patients *and* raises 35 fewer false alarms on the same held-out patients.
@@ -211,7 +213,30 @@ Older models are kept in `models/v1_backup/` and `models/v2_backup/` (git-ignore
 
 ## 🔬 Model improvement research
 
-The v3 recipe came from a review of the PhysioNet/CinC 2019 literature, turned into controlled experiments ([`src/experiments_v3.py`](src/experiments_v3.py), results in [`models/experiments_v3.json`](models/experiments_v3.json)).
+The v3 recipe came from a review of the PhysioNet/CinC 2019 literature, turned into controlled experiments ([`src/experiments_v3.py`](src/experiments_v3.py), results in [`models/experiments_v3.json`](models/experiments_v3.json)). A second round ([`src/experiments_v4.py`](src/experiments_v4.py)) then tested whether precision and recall could both rise further.
+
+### Every model test at a glance
+
+All comparisons use patients inside the training split (inner-validation), plus the calibration patients for the final check. The 8,068 test patients were used once, for the adopted model only.
+
+| # | What was tested | Source of the idea | Result | Adopted? |
+|:---|:---|:---|:---|:---:|
+| E1 | 118 new features: test counts and recency, vital-sign variability and change, partial SOFA and its 24 h rise, SIRS, NEWS, BUN/Cr | Du et al., Yang et al., Morrill et al. | ROC-AUC 0.821 → 0.834 | ✅ v3 |
+| E2 | Trees use missing values natively (no median imputation), random forest dropped | – | 0.834 → 0.836 | ✅ v3 |
+| E3 | Tuned gradient boosting with early stopping | top-5 challenge entries | PR-AUC 0.117 → 0.136 | ✅ v3 |
+| E4 | Utility-weighted loss | Hammoud et al. | PR-AUC 0.148, best capped utility | ✅ v3 |
+| E5 | Remove time-in-hospital features (ICULOS, HospAdmTime) | shortcut check | −0.006 ROC-AUC, −0.02 utility | ❌ (shortcut documented) |
+| E6 | Hyperparameter sweep of XGBoost depth and LightGBM leaves | – | XGB depth 4 + LGB 127 leaves, ROC-AUC 0.845 | ✅ v3 |
+| E7 | Train on one hospital system, test on the other | Reyna et al. | ROC-AUC ≈ 0.77 both ways | – (limitation) |
+| R1 | 42 path-signature features (Lévy areas over 6 h / 12 h) | Morrill et al. (winner) | No gain (ΔPR-AUC −0.008 to +0.006) | ❌ |
+| R2 | 5-seed bagging | – | +0.002 ROC-AUC on calibration patients, 5× model size | ❌ (too small) |
+| R3 | CatBoost on GPU | – | Worse alone (PR-AUC 0.132 vs 0.143) | ❌ |
+| R4 | XGBoost tuned with Optuna, 24 trials on GPU | – | PR-AUC 0.152 on tuning data, 0.124 (= baseline) on fresh patients | ❌ (overfit to tuning data) |
+| R5 | Ensembles of XGBoost, LightGBM, CatBoost, tuned XGBoost (mean probability and mean rank) | – | Within noise on calibration patients | ❌ |
+| R6 | Separate alert threshold per hospital system | – | Balances false alarms (A 15.7% → 10.1%, B 8.0% → 11.2%) but −4 points recall | ❌ (site policy choice) |
+| R7 | Alert rules: strict 2 h, 3 h persistence, 3 h smoothing, latch, rising-risk only | – | None better than the current 2 h rule; rising-only clearly worse | ❌ |
+
+Details for E0–E7 follow; round 2 (R1–R7) is under [Round 2](#round-2-can-precision-and-recall-both-go-up-after-v3).
 
 **What the literature suggested**
 
@@ -248,6 +273,49 @@ E3/E5 early-stopped on PR-AUC, which halted LightGBM after 2 trees; E6 re-tuned 
 
 Both recipes lose about 0.09 ROC-AUC at a hospital they have never seen. v3 still ranks patients better, but its alert utility transfers worse from B to A, so calibration and threshold must be re-tuned at any new site before use.
 
+### Round 2: can precision and recall both go up? (after v3)
+
+Moving the alert threshold only trades precision for recall, so this round tested changes that could improve both ([`src/experiments_v4.py`](src/experiments_v4.py), results in [`models/experiments_v4.json`](models/experiments_v4.json)). Same protocol as above: inner-train / inner-validation inside the training patients. To fit in laptop memory, every variant trained on all hours of septic patients plus a random 40% of the other hours, re-weighted by 2.5 (baseline cost: ROC-AUC 0.844 → 0.843).
+
+**Model variants** (inner-validation, 4,236 patients; CI = patient-level bootstrap of the PR-AUC change vs baseline):
+
+| Variant | ROC-AUC | PR-AUC | Utility @ cap | Septic alerted | ΔPR-AUC 95% CI |
+|:---|:---:|:---:|:---:|:---:|:---:|
+| Baseline (v3 recipe) | 0.843 | 0.143 | 0.357 | 67.2% | |
+| + 42 path-signature features (Lévy areas, Morrill et al.) | 0.841 | 0.143 | 0.357 | 68.8% | −0.008 to +0.006 |
+| 5-seed bagging | 0.844 | 0.144 | 0.358 | 67.5% | −0.005 to +0.005 |
+| CatBoost (GPU) | 0.841 | 0.132 | 0.353 | 63.6% | −0.032 to +0.007 |
+| XGBoost tuned with Optuna (24 trials, GPU)* | 0.840 | 0.152 | 0.354 | 67.2% | −0.004 to +0.019 |
+| LightGBM + tuned XGBoost* | 0.843 | 0.151 | 0.354 | 67.5% | +0.001 to +0.014 |
+| All four, rank average* | 0.844 | 0.148 | 0.363 | 67.9% | −0.003 to +0.013 |
+
+\* tuned on the same inner-validation patients, so these numbers are optimistic. The leading candidates were therefore re-checked on the **calibration patients** (4,033, never used for training, tuning or choosing variants):
+
+| Calibration patients | ROC-AUC | PR-AUC | Utility @ cap | Septic alerted | ΔROC-AUC 95% CI |
+|:---|:---:|:---:|:---:|:---:|:---:|
+| Baseline (v3 recipe) | 0.850 | 0.124 | 0.386 | 69.6% | |
+| 5-seed bagging | 0.851 | 0.125 | 0.387 | 71.0% | +0.001 to +0.003 |
+| Tuned XGBoost | 0.848 | 0.124 | 0.379 | 69.3% | −0.005 to +0.001 |
+| Bagged XGB + LGB + tuned XGB | 0.851 | 0.126 | 0.391 | 70.3% | −0.000 to +0.003 |
+| XGB + LGB + CatBoost | 0.851 | 0.125 | 0.391 | 70.3% | −0.002 to +0.003 |
+
+**Operating rules** (baseline model; isotonic calibration and thresholds chosen on one half of inner-validation and measured on the other, 5 repeats; utility SD ≈ 0.01):
+
+| Rule | Utility | Septic alerted | Non-septic alerted (A / B) | Patient precision |
+|:---|:---:|:---:|:---:|:---:|
+| Current: 2 h persistence, one threshold | 0.344 | 62.5% | 11.8% (15.7 / 8.0) | 29.6% |
+| Separate threshold per hospital system | 0.338 | 58.5% | 10.6% (10.1 / 11.2) | 30.3% |
+| 3 h persistence | 0.346 | 61.8% | 12.6% | 27.9% |
+| Latch (stay on while risk ≥ 0.7 × threshold) | 0.348 | 62.5% | 11.8% | 29.6% |
+| Rising risk only | 0.260 | 62.5% | 11.8% | 29.6% |
+
+**Conclusions**
+- Nothing beat v3 by a margin that matters. The only change confirmed on fresh patients is 5-seed bagging: +0.002 ROC-AUC and about 1 point more septic patients alerted, at 5× the model size and inference cost. v3 is kept.
+- The Optuna and ensemble gains on inner-validation disappeared on the calibration patients: a concrete case of tuning on the data you report.
+- Signature features did not help on top of v3's 185 features, which already include trends, variability and partial SOFA.
+- Per-hospital thresholds do not raise precision and recall together, but they fix an imbalance: with one shared threshold, hospital system A alerts about 16% of its non-septic patients (over the 15% cap) and B only 8%. Equalising them costs about 4 points of recall. This is a policy choice for a deployment site, not a model improvement.
+- Remaining levers are outside this dataset: richer inputs (medications, fluids, notes) and multi-hospital training data.
+
 **Sources**: [PhysioNet 2019 challenge papers](https://physionet.org/content/challenge-2019/1.0.0/papers/index.html) · [Morrill et al., signature-based model](https://www.cinc.org/2019/Program/accepted/14.html) · [Hammoud et al., optimal sample weighting](https://aminer.org/pub/5e5e196293d709897ce693ef/early-prediction-of-sepsis-using-gradient-boosting-decision-trees-with-optimal-sample) · [Reyna et al., analysis of the challenge (top teams on the hidden hospital)](https://arxiv.org/pdf/2012.11013) · [Yang et al., multi-feature fusion XGBoost](https://alpha.physionet.org/files/challenge-2019/1.0.0/papers/CinC2019-020.pdf?download)
 
 ---
@@ -260,7 +328,7 @@ Both recipes lose about 0.09 ROC-AUC at a hospital they have never seen. v3 stil
 - **Hour-level labels**: the 6 h pre-onset window is labelled positive, so alerts long before onset count against the model.
 - **Prototype modules are not in the trained pipeline**: conformal gating, signatures, NLP, waveforms, federated learning and RL are tested on synthetic inputs only (see status markers above). Conformal prediction has not been re-calibrated for the current model.
 - **No subgroup / fairness analysis**, no prospective or silent-mode evaluation.
-- **Next steps**: the length-of-stay ablations above; external validation on MIMIC-IV; subgroup analysis by age, sex and unit; signature features (as in the winning entry) and sequence models (e.g. GRU-D) as comparisons.
+- **Next steps**: the length-of-stay ablations above; external validation on MIMIC-IV; subgroup analysis by age, sex and unit; sequence models (e.g. GRU-D) as a comparison (signature features, bagging, CatBoost and Optuna tuning were tested in round 2 and gave no meaningful gain).
 
 ### Retraining
 
@@ -271,6 +339,7 @@ python src/train_full.py --device cpu                     # no GPU
 python src/train_full.py --recipe v2                      # previous recipe
 python src/train_full.py --max-non-septic-alert-rate 1.0  # pure PhysioNet-utility threshold, no alarm cap
 python src/experiments_v3.py                              # re-run the research experiments (E0-E5); SWEEP / CROSS for E6 / E7
+python src/experiments_v4.py MODEL                        # round 2 model variants (needs catboost, optuna); RULES; CONFIRM
 ```
 
 The web app rebuilds its ward automatically when the model file is newer than its cache.
